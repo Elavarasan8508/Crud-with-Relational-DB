@@ -28,7 +28,7 @@ public class DatabaseConfig {
         config.setMaxLifetime(1800000);
         
         dataSource = new HikariDataSource(config);
-        System.out.println("✅ Connection pool initialized");
+        System.out.println(" Connection pool initialized");
     }
     
     public static DataSource getDataSource() {

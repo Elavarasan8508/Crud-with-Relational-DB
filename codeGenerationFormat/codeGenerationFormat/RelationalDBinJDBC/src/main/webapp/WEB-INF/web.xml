@@ -20,7 +20,7 @@
         <servlet-name>RootStatusController</servlet-name>
         <url-pattern>/health</url-pattern>
     </servlet-mapping>
-
+    
     <!-- Customer Controller -->
     <servlet>
         <servlet-name>CustomerController</servlet-name>

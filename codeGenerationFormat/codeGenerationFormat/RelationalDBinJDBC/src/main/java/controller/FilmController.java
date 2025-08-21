@@ -17,7 +17,7 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.Map;
 import java.util.HashMap;
-import java.util.List;	
+import java.util.List;
 
 public class FilmController extends HttpServlet {
     
@@ -49,8 +49,7 @@ public class FilmController extends HttpServlet {
     
     //  Mix-in classes to ignore circular references WITHOUT modifying POJOs
     abstract class FilmActorMixin {
-  
-          @JsonIgnore abstract Film getFilm();
+        @JsonIgnore abstract Film getFilm();
         @JsonIgnore abstract void setFilm(Film film);
     }
     abstract class FilmCategoryMixin {
@@ -78,10 +77,18 @@ public class FilmController extends HttpServlet {
             } else {
                 // Handle regular film creation: POST /films
                 Map<String, Object> requestData = objectMapper.readValue(request.getInputStream(), Map.class);
-                Map<String, Object> result = filmService.handleFilmCreation(requestData);
+                
+                // Service returns Film object
+                Film film = filmService.createFilm(requestData);
+                
+                //  SIMPLE RESPONSE FOR POST (no complex object)
+                Map<String, Object> responseData = new HashMap<>();
+                responseData.put("success", true);
+                responseData.put("filmId", film.getFilmId());
+                responseData.put("message", "Film created successfully");
                 
                 response.setStatus(HttpServletResponse.SC_CREATED);
-                objectMapper.writeValue(response.getOutputStream(), result);
+                objectMapper.writeValue(response.getOutputStream(), responseData);
             }
             
         } catch (SQLException | IllegalArgumentException e) {
@@ -91,7 +98,7 @@ public class FilmController extends HttpServlet {
         }
     }
 
-    //  NEW: Handle inventory creation
+    //  Handle inventory creation
     private void handleInventoryCreation(String pathInfo, HttpServletRequest request, HttpServletResponse response) 
             throws IOException, SQLException {
         
@@ -103,8 +110,8 @@ public class FilmController extends HttpServlet {
         }
         
         try {
-            int filmId = Integer.parseInt(pathParts[1]);        // /films/1/inventory/3
-            int storeId = Integer.parseInt(pathParts[1]);       // /films/1/inventory/3
+            int filmId = Integer.parseInt(pathParts[1]);        // ✅ Fixed: pathParts[1]
+            int storeId = Integer.parseInt(pathParts[2]);       // ✅ Fixed: pathParts[2] not pathParts[1]
             
             // Read quantity from JSON body
             Map<String, Object> requestData = objectMapper.readValue(request.getInputStream(), Map.class);
@@ -123,66 +130,93 @@ public class FilmController extends HttpServlet {
             
         } catch (NumberFormatException e) {
             handleError(response, HttpServletResponse.SC_BAD_REQUEST, "Invalid film ID or store ID");
+        } catch (ArrayIndexOutOfBoundsException e) {
+            handleError(response, HttpServletResponse.SC_BAD_REQUEST, "Invalid URL format");
         }
     }
 
-    
     @Override
-    protected void doGet(HttpServletRequest request, HttpServletResponse response) 
+    protected void doGet(HttpServletRequest request, HttpServletResponse response)
             throws IOException {
-        
+
         response.setContentType("application/json");
         response.setCharacterEncoding("UTF-8");
-        
+
         try {
             // Extract all possible query parameters
             String customerIdParam = request.getParameter("customerId");
             String activeRentals = request.getParameter("activeRentals");
             String rentalIdParam = request.getParameter("rentalId");
-            
+            String storeIdParam = request.getParameter("storeId");
+            String overdueParam = request.getParameter("overdue");
+
             //  Film query parameters
             String filmIdParam = request.getParameter("filmId");
             String titleParam = request.getParameter("title");
             String languageIdParam = request.getParameter("languageId");
-            String actorIdParam = request.getParameter("actorId");        
-            String categoryIdParam = request.getParameter("categoryId");  
-            
+            String actorIdParam = request.getParameter("actorId");
+            String categoryIdParam = request.getParameter("categoryId");
+
             //  Check for inventory in URL path
             String pathInfo = request.getPathInfo();
-            
-            Map<String, Object> result;
-            
+
             if (pathInfo != null && pathInfo.contains("/inventory")) {
-                //  Handle inventory queries: GET /films/1/inventory or GET /films/1/inventory/3
-                result = handleInventoryQuery(pathInfo);
-                
+                handleInventoryQuery(pathInfo, response);
+
             } else if (customerIdParam != null) {
-                // Delegate customer rental history query to service
                 int customerId = Integer.parseInt(customerIdParam);
-                result = rentalService.handleCustomerHistoryQuery(customerId);
-                
+                List<Rental> rentals = rentalService.getCustomerRentals(customerId);
+                objectMapper.writeValue(response.getOutputStream(), rentals);
+
             } else if ("true".equals(activeRentals)) {
-                // Delegate active rentals query to service
-                result = rentalService.handleActiveRentalsQuery();
-                
+                List<Rental> rentals = rentalService.getAllActiveRentals();
+                objectMapper.writeValue(response.getOutputStream(), rentals);
+
             } else if (rentalIdParam != null) {
-                // Delegate specific rental query to service
                 int rentalId = Integer.parseInt(rentalIdParam);
-                result = rentalService.handleRentalQuery(rentalId);
-                
-            } else if (filmIdParam != null || titleParam != null || languageIdParam != null || 
-                       actorIdParam != null || categoryIdParam != null) {
-                //  Pass all 5 parameters to film service
-                result = filmService.handleFilmQuery(filmIdParam, titleParam, languageIdParam, actorIdParam, categoryIdParam);
-                
+                Rental rental = rentalService.getRentalById(rentalId);
+                objectMapper.writeValue(response.getOutputStream(), rental);
+
+            } else if (storeIdParam != null) {
+                int storeId = Integer.parseInt(storeIdParam);
+                List<Rental> rentals = rentalService.getRentalsByStore(storeId);
+                objectMapper.writeValue(response.getOutputStream(), rentals);
+
+            } else if ("true".equals(overdueParam)) {
+                List<Rental> rentals = rentalService.getOverdueRentals();
+                objectMapper.writeValue(response.getOutputStream(), rentals);
+
             } else {
-                //  Default case - get all films
-                result = filmService.handleFilmQuery(null, null, null, null, null);
+                if (filmIdParam != null) {
+                    int filmId = Integer.parseInt(filmIdParam);
+                    Film film = filmService.getFilmById(filmId);
+                    objectMapper.writeValue(response.getOutputStream(), film);
+
+                } else if (titleParam != null) {
+                    List<Film> films = filmService.getFilmsByTitle(titleParam);
+                    objectMapper.writeValue(response.getOutputStream(), films);
+
+                } else if (languageIdParam != null) {
+                    int languageId = Integer.parseInt(languageIdParam);
+                    List<Film> films = filmService.getFilmsByLanguage(languageId);
+                    objectMapper.writeValue(response.getOutputStream(), films);
+
+                } else if (actorIdParam != null) {
+                    int actorId = Integer.parseInt(actorIdParam);
+                    List<Film> films = filmService.getFilmsByActor(actorId);
+                    objectMapper.writeValue(response.getOutputStream(), films);
+
+                } else if (categoryIdParam != null) {
+                    int categoryId = Integer.parseInt(categoryIdParam);
+                    List<Film> films = filmService.getFilmsByCategory(categoryId);
+                    objectMapper.writeValue(response.getOutputStream(), films);
+
+                } else {
+                    List<Film> films = filmService.getAllFilms();
+                    objectMapper.writeValue(response.getOutputStream(), films);
+                }
             }
-            
-            //  SAFE SERIALIZATION - Jackson will now ignore circular references
-            objectMapper.writeValue(response.getOutputStream(), result);
-            
+
         } catch (SQLException e) {
             handleError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Database error: " + e.getMessage());
         } catch (NumberFormatException e) {
@@ -194,27 +228,63 @@ public class FilmController extends HttpServlet {
         }
     }
 
-    //  Handle inventory queries
-    private Map<String, Object> handleInventoryQuery(String pathInfo) throws SQLException {
+
+    //  Handle inventory queries - returns List instead of Map
+    private void handleInventoryQuery(String pathInfo, HttpServletResponse response) throws SQLException, IOException {
         String[] pathParts = pathInfo.split("/");
         
         if (pathParts.length >= 3) {
             int filmId = Integer.parseInt(pathParts[1]);
             
             if (pathParts.length == 3) {
-                // GET /films/1/inventory - get all inventory for this film
-                return filmService.handleFilmInventoryQuery(filmId);
+                // GET /films/1/inventory - get all inventory for this film as List
+                List<Map<String, Object>> inventoryList = filmService.handleFilmInventoryQuery(filmId);
+                objectMapper.writeValue(response.getOutputStream(), inventoryList);
             } else if (pathParts.length >= 4) {
-                // GET /films/1/inventory/3 - get inventory for this film at specific store
+                // GET /films/1/inventory/3 - get inventory for this film at specific store as List
                 int storeId = Integer.parseInt(pathParts[3]);
-                return filmService.handleFilmStoreInventoryQuery(filmId, storeId);
+                List<Map<String, Object>> inventoryList = filmService.handleFilmStoreInventoryQuery(filmId, storeId);
+                objectMapper.writeValue(response.getOutputStream(), inventoryList);
             }
+        } else {
+            throw new IllegalArgumentException("Invalid inventory query URL");
         }
-        
-        throw new IllegalArgumentException("Invalid inventory query URL");
     }
 
-
+    @Override
+    protected void doPut(HttpServletRequest request, HttpServletResponse response) 
+            throws IOException {
+        
+        response.setContentType("application/json");
+        response.setCharacterEncoding("UTF-8");
+        
+        try {
+            String filmIdParam = request.getParameter("filmId");
+            
+            if (filmIdParam != null) {
+                int filmId = Integer.parseInt(filmIdParam);
+                Map<String, Object> requestData = objectMapper.readValue(request.getInputStream(), Map.class);
+                
+                Film film = filmService.updateFilm(filmId, requestData);
+                
+                //  SIMPLE RESPONSE FOR PUT (no complex object)
+                Map<String, Object> responseData = new HashMap<>();
+                responseData.put("success", true);
+                responseData.put("filmId", film.getFilmId());
+                responseData.put("message", "Film updated successfully");
+                
+                objectMapper.writeValue(response.getOutputStream(), responseData);
+                
+            } else {
+                handleError(response, HttpServletResponse.SC_BAD_REQUEST, "Film ID is required");
+            }
+            
+        } catch (SQLException | IllegalArgumentException e) {
+            handleError(response, HttpServletResponse.SC_BAD_REQUEST, e.getMessage());
+        } catch (Exception e) {
+            handleError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Internal server error");
+        }
+    }
 
     @Override
     protected void doDelete(HttpServletRequest request, HttpServletResponse response) 
@@ -230,14 +300,21 @@ public class FilmController extends HttpServlet {
                 int filmId = Integer.parseInt(filmIdParam);
                 
                 // Delegate to service
-                Map<String, Object> result = filmService.handleFilmDeletion(filmId);
-                objectMapper.writeValue(response.getOutputStream(), result);
+                Film film = filmService.deleteFilm(filmId);
+                
+                //  SIMPLE RESPONSE FOR DELETE (no complex object)
+                Map<String, Object> responseData = new HashMap<>();
+                responseData.put("success", true);
+                responseData.put("filmId", filmId);
+                responseData.put("message", "Film deleted successfully");
+                
+                objectMapper.writeValue(response.getOutputStream(), responseData);
                 
             } else {
                 handleError(response, HttpServletResponse.SC_BAD_REQUEST, "Film ID is required");
             }
             
-        } catch (SQLException | IllegalArgumentException e) {
+        } catch (SQLException | IllegalArgumentException | IllegalStateException e) {
             handleError(response, HttpServletResponse.SC_BAD_REQUEST, e.getMessage());
         } catch (Exception e) {
             handleError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Internal server error");

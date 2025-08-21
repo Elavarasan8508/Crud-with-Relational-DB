@@ -170,6 +170,87 @@ public class StoreManagementService {
         });
     }
     
+    // Business Logic: Get Store Customers - Returns List<Customer>
+    public List<Customer> getStoreCustomers(int storeId) throws SQLException {
+        return TransactionManager.executeInTransaction(connection -> {
+            Store store = storeDao.findById(connection, storeId);
+            if (store == null) {
+                throw new IllegalArgumentException("Store not found with ID: " + storeId);
+            }
+            
+            List<Customer> customers = customerDao.findByStoreId(connection, storeId);
+            return customers != null ? customers : new ArrayList<>();
+        });
+    }
+    
+    // Business Logic: Get Store Staff - Returns List<Staff>
+    public List<Staff> getStoreStaff(int storeId) throws SQLException {
+        return TransactionManager.executeInTransaction(connection -> {
+            Store store = storeDao.findById(connection, storeId);
+            if (store == null) {
+                throw new IllegalArgumentException("Store not found with ID: " + storeId);
+            }
+            
+            List<Staff> staff = staffDao.findByStoreId(connection, storeId);
+            return staff != null ? staff : new ArrayList<>();
+        });
+    }
+    
+    // Business Logic: Get Store Rentals - Returns List<Rental>
+    public List<Rental> getStoreRentals(int storeId) throws SQLException {
+        return TransactionManager.executeInTransaction(connection -> {
+            Store store = storeDao.findById(connection, storeId);
+            if (store == null) {
+                throw new IllegalArgumentException("Store not found with ID: " + storeId);
+            }
+            
+            // Get all rentals where inventory belongs to this store
+            List<Rental> allRentals = rentalDao.findAll(connection);
+            List<Rental> storeRentals = allRentals.stream()
+                .filter(rental -> {
+                    try {
+                        Inventory inventory = inventoryDao.findById(connection, rental.getInventory().getInventoryId());
+                        return inventory != null && inventory.getStore().getStoreId() == storeId;
+                    } catch (Exception e) {
+                        return false;
+                    }
+                })
+                .collect(Collectors.toList());
+            
+            return storeRentals;
+        });
+    }
+    
+    // Business Logic: Get Store Inventory - Returns List<Map<String, Object>>
+    public List<Map<String, Object>> getStoreInventory(int storeId) throws SQLException {
+        return TransactionManager.executeInTransaction(connection -> {
+            Store store = storeDao.findById(connection, storeId);
+            if (store == null) {
+                throw new IllegalArgumentException("Store not found with ID: " + storeId);
+            }
+            
+            List<Inventory> inventoryList = inventoryDao.findByStoreId(connection, storeId);
+            
+            // Load film details for each inventory item
+            List<Map<String, Object>> inventoryWithFilms = new ArrayList<>();
+            for (Inventory inventory : inventoryList) {
+                Map<String, Object> inventoryData = new HashMap<>();
+                inventoryData.put("inventoryId", inventory.getInventoryId());
+                inventoryData.put("storeId", storeId);
+                
+                if (inventory.getFilm() != null) {
+                    Film film = filmDao.findById(connection, inventory.getFilm().getFilmId());
+                    inventoryData.put("film", film);
+                }
+                
+                inventoryData.put("lastUpdate", inventory.getLastUpdate().toString());
+                inventoryWithFilms.add(inventoryData);
+            }
+            
+            return inventoryWithFilms;
+        });
+    }
+    
     // Business Logic: Update Store - Returns updated Store object
     public Store updateStore(int storeId, Map<String, Object> requestData) throws SQLException {
         return TransactionManager.executeInTransaction(connection -> {
@@ -213,235 +294,6 @@ public class StoreManagementService {
             storeDao.deleteById(connection, storeId);
             return store;
         });
-    }
-    
-    // Controller Support Methods
-    public Map<String, Object> handleStoreCreation(Map<String, Object> requestData) throws SQLException {
-        try {
-            Store createdStore = createStore(requestData);
-            
-            //  SE RESPONSE FOR POST (no complex store object)
-            Map<String, Object> responseData = new HashMap<>();
-            responseData.put("success", true);
-            responseData.put("storeId", createdStore.getStoreId());
-            responseData.put("message", "Store created successfully");
-            
-            return responseData;
-            
-        } catch (Exception e) {
-            throw new SQLException("Store creation failed: " + e.getMessage(), e);
-        }
-    }
-    
-    public Map<String, Object> handleStoreQuery(int storeId) throws SQLException {
-        Store store = getStoreById(storeId);
-        
-        Map<String, Object> responseData = new HashMap<>();
-        responseData.put("success", true);
-        responseData.put("store", store);
-        responseData.put("message", "Store retrieved successfully");
-        
-        return responseData;
-    }
-    
-    public Map<String, Object> handleAllStoresQuery() throws SQLException {
-        List<Store> stores = getAllStores();
-        
-        Map<String, Object> responseData = new HashMap<>();
-        responseData.put("success", true);
-        responseData.put("totalStores", stores.size());
-        responseData.put("stores", stores);
-        
-        if (!stores.isEmpty()) {
-            responseData.put("statistics", generateStoreStatistics(stores));
-        }
-        
-        responseData.put("message", "All stores retrieved successfully");
-        
-        return responseData;
-    }
-    
-    //  NEW: Handle store customers query
-    public Map<String, Object> handleStoreCustomersQuery(int storeId) throws SQLException {
-        return TransactionManager.executeInTransaction(connection -> {
-            Store store = storeDao.findById(connection, storeId);
-            if (store == null) {
-                throw new IllegalArgumentException("Store not found with ID: " + storeId);
-            }
-            
-            List<Customer> customers = customerDao.findByStoreId(connection, storeId);
-            
-            Map<String, Object> responseData = new HashMap<>();
-            responseData.put("success", true);
-            responseData.put("storeId", storeId);
-            responseData.put("totalCustomers", customers.size());
-            responseData.put("customers", customers);
-            responseData.put("message", "Store customers retrieved successfully");
-            
-            return responseData;
-        });
-    }
-    
-    //  NEW: Handle store staff query
-    public Map<String, Object> handleStoreStaffQuery(int storeId) throws SQLException {
-        return TransactionManager.executeInTransaction(connection -> {
-            Store store = storeDao.findById(connection, storeId);
-            if (store == null) {
-                throw new IllegalArgumentException("Store not found with ID: " + storeId);
-            }
-            
-            List<Staff> staff = staffDao.findByStoreId(connection, storeId);
-            
-            Map<String, Object> responseData = new HashMap<>();
-            responseData.put("success", true);
-            responseData.put("storeId", storeId);
-            responseData.put("totalStaff", staff.size());
-            responseData.put("staff", staff);
-            responseData.put("message", "Store staff retrieved successfully");
-            
-            return responseData;
-        });
-    }
-    
-    //  NEW: Handle store rentals query
-    public Map<String, Object> handleStoreRentalsQuery(int storeId) throws SQLException {
-        return TransactionManager.executeInTransaction(connection -> {
-            Store store = storeDao.findById(connection, storeId);
-            if (store == null) {
-                throw new IllegalArgumentException("Store not found with ID: " + storeId);
-            }
-            
-            // Get all rentals where inventory belongs to this store
-            List<Rental> allRentals = rentalDao.findAll(connection);
-            List<Rental> storeRentals = allRentals.stream()
-                .filter(rental -> {
-                    try {
-                        Inventory inventory = inventoryDao.findById(connection, rental.getInventory().getInventoryId());
-                        return inventory != null && inventory.getStore().getStoreId() == storeId;
-                    } catch (Exception e) {
-                        return false;
-                    }
-                })
-                .collect(Collectors.toList());
-            
-            Map<String, Object> responseData = new HashMap<>();
-            responseData.put("success", true);
-            responseData.put("storeId", storeId);
-            responseData.put("totalRentals", storeRentals.size());
-            responseData.put("activeRentals", storeRentals.stream()
-                .mapToLong(r -> r.getReturnDate() == null ? 1 : 0).sum());
-            responseData.put("rentals", storeRentals);
-            responseData.put("message", "Store rentals retrieved successfully");
-            
-            return responseData;
-        });
-    }
-    
-    //  NEW: Handle stores by city query
-    public Map<String, Object> handleStoresByCityQuery(String cityName) throws SQLException {
-        List<Store> stores = getStoresByCity(cityName);
-        
-        Map<String, Object> responseData = new HashMap<>();
-        responseData.put("success", true);
-        responseData.put("cityName", cityName);
-        responseData.put("totalStores", stores.size());
-        responseData.put("stores", stores);
-        responseData.put("message", stores.size() + " stores found in " + cityName);
-        
-        return responseData;
-    }
-    
-    public Map<String, Object> handleStoreUpdate(int storeId, Map<String, Object> requestData) throws SQLException {
-        Store store = updateStore(storeId, requestData);
-        
-        //  SE RESPONSE FOR PUT (no complex store object)
-        Map<String, Object> responseData = new HashMap<>();
-        responseData.put("success", true);
-        responseData.put("storeId", store.getStoreId());
-        responseData.put("message", "Store updated successfully");
-        
-        return responseData;
-    }
-    
-    public Map<String, Object> handleStoreDeletion(int storeId) throws SQLException {
-        Store store = deleteStore(storeId);
-        
-        //  SE RESPONSE FOR DELETE (no complex store object)
-        Map<String, Object> responseData = new HashMap<>();
-        responseData.put("success", true);
-        responseData.put("storeId", storeId);
-        responseData.put("message", "Store deleted successfully");
-        
-        return responseData;
-    }
-    
-    public Map<String, Object> handleInventoryQuery(int storeId) throws SQLException {
-        return TransactionManager.executeInTransaction(connection -> {
-            Store store = storeDao.findById(connection, storeId);
-            if (store == null) {
-                throw new IllegalArgumentException("Store not found with ID: " + storeId);
-            }
-            
-            List<Inventory> inventoryList = inventoryDao.findByStoreId(connection, storeId);
-            
-            // Load film details for each inventory item
-            List<Map<String, Object>> inventoryWithFilms = new ArrayList<>();
-            for (Inventory inventory : inventoryList) {
-                Map<String, Object> inventoryData = new HashMap<>();
-                inventoryData.put("inventoryId", inventory.getInventoryId());
-                
-                if (inventory.getFilm() != null) {
-                    Film film = filmDao.findById(connection, inventory.getFilm().getFilmId());
-                    inventoryData.put("film", film);
-                }
-                
-                inventoryData.put("lastUpdate", inventory.getLastUpdate());
-                inventoryWithFilms.add(inventoryData);
-            }
-            
-            Map<String, Object> result = new HashMap<>();
-            result.put("success", true);
-            result.put("storeId", storeId);
-            result.put("totalCopies", inventoryList.size());
-            result.put("inventory", inventoryWithFilms);
-            result.put("message", "Store inventory retrieved successfully");
-            
-            return result;
-        });
-    }
-    
-    // Business Logic: Generate Store Statistics
-    private Map<String, Object> generateStoreStatistics(List<Store> stores) {
-        Map<String, Object> statistics = new HashMap<>();
-        
-        int totalCustomers = stores.stream()
-            .mapToInt(store -> store.getCustomerList() != null ? store.getCustomerList().size() : 0)
-            .sum();
-        
-        int totalStaff = stores.stream()
-            .mapToInt(store -> store.getStaffList() != null ? store.getStaffList().size() : 0)
-            .sum();
-        
-        int totalInventory = stores.stream()
-            .mapToInt(store -> store.getInventoryList() != null ? store.getInventoryList().size() : 0)
-            .sum();
-        
-        Map<String, Long> citiesDistribution = stores.stream()
-            .filter(store -> store.getAddress() != null && 
-                            store.getAddress().getCity() != null && 
-                            store.getAddress().getCity().getCity() != null)
-            .collect(Collectors.groupingBy(
-                store -> store.getAddress().getCity().getCity(),
-                Collectors.counting()
-            ));
-        
-        statistics.put("totalStores", stores.size());
-        statistics.put("totalCustomers", totalCustomers);
-        statistics.put("totalStaff", totalStaff);
-        statistics.put("totalInventory", totalInventory);
-        statistics.put("citiesDistribution", citiesDistribution);
-        
-        return statistics;
     }
     
     // Business Logic: Build Store with Relationships

@@ -38,7 +38,7 @@ public class FilmManagementService {
   
     
     //  Handle film inventory query - GET /films/1/inventory
-    public Map<String, Object> handleFilmInventoryQuery(int filmId) throws SQLException {
+    public List<Map<String, Object>> handleFilmInventoryQuery(int filmId) throws SQLException {
         return TransactionManager.executeInTransaction(connection -> {
             try {
                 // Validate film exists
@@ -59,6 +59,8 @@ public class FilmManagementService {
                     
                     Map<String, Object> storeData = storeInventory.get(storeId);
                     storeData.putIfAbsent("storeId", storeId);
+                    storeData.putIfAbsent("filmId", filmId);
+                    storeData.putIfAbsent("filmTitle", film.getTitle());
                     storeData.putIfAbsent("total", 0);
                     storeData.putIfAbsent("available", 0);
                     storeData.putIfAbsent("rented", 0);
@@ -79,15 +81,8 @@ public class FilmManagementService {
                     }
                 }
                 
-                Map<String, Object> responseData = new HashMap<>();
-                responseData.put("success", true);
-                responseData.put("filmId", filmId);
-                responseData.put("filmTitle", film.getTitle());
-                responseData.put("totalCopies", inventoryList.size());
-                responseData.put("storeInventory", storeInventory.values());
-                responseData.put("message", "Inventory retrieved for film: " + film.getTitle());
-                
-                return responseData;
+                // Return as List instead of wrapped Map
+                return new ArrayList<>(storeInventory.values());
                 
             } catch (Exception e) {
                 throw new RuntimeException("Failed to retrieve film inventory: " + e.getMessage(), e);
@@ -96,7 +91,7 @@ public class FilmManagementService {
     }
 
     //  NEW: Handle film store inventory query - GET /films/1/inventory/3
-    public Map<String, Object> handleFilmStoreInventoryQuery(int filmId, int storeId) throws SQLException {
+    public List<Map<String, Object>> handleFilmStoreInventoryQuery(int filmId, int storeId) throws SQLException {
         return TransactionManager.executeInTransaction(connection -> {
             try {
                 // Validate film exists
@@ -118,12 +113,13 @@ public class FilmManagementService {
                     .collect(Collectors.toList());
                 
                 List<Map<String, Object>> inventoryDetails = new ArrayList<>();
-                int availableCount = 0;
-                int rentedCount = 0;
                 
                 for (Inventory inventory : inventoryList) {
                     Map<String, Object> inventoryData = new HashMap<>();
                     inventoryData.put("inventoryId", inventory.getInventoryId());
+                    inventoryData.put("filmId", filmId);
+                    inventoryData.put("filmTitle", film.getTitle());
+                    inventoryData.put("storeId", storeId);
                     inventoryData.put("lastUpdate", inventory.getLastUpdate().toString());
                     
                     // Check rental status
@@ -134,31 +130,19 @@ public class FilmManagementService {
                     
                     if (activeRentals.isEmpty()) {
                         inventoryData.put("status", "AVAILABLE");
-                        availableCount++;
                     } else {
                         Rental rental = activeRentals.get(0);
                         inventoryData.put("status", "RENTED");
                         inventoryData.put("rentalId", rental.getRentalId());
                         inventoryData.put("customerId", rental.getCustomer().getCustomerId());
                         inventoryData.put("rentalDate", rental.getRentalDate().toString());
-                        rentedCount++;
                     }
                     
                     inventoryDetails.add(inventoryData);
                 }
                 
-                Map<String, Object> responseData = new HashMap<>();
-                responseData.put("success", true);
-                responseData.put("filmId", filmId);
-                responseData.put("filmTitle", film.getTitle());
-                responseData.put("storeId", storeId);
-                responseData.put("totalCopies", inventoryList.size());
-                responseData.put("available", availableCount);
-                responseData.put("rented", rentedCount);
-                responseData.put("inventory", inventoryDetails);
-                responseData.put("message", "Store inventory retrieved for film: " + film.getTitle());
-                
-                return responseData;
+                // Return the list directly
+                return inventoryDetails;
                 
             } catch (Exception e) {
                 throw new RuntimeException("Failed to retrieve store inventory: " + e.getMessage(), e);
@@ -264,20 +248,29 @@ public class FilmManagementService {
                     //  ACTORS: Avoid duplicates
                     if (!actors.isEmpty()) {
                         for (Actor actor : actors) {
-                            // Check for existing actor by name
-                            List<Actor> existingActors = actorDao.findByName(connection, 
-                                actor.getFirstName(), actor.getLastName());
-                            
                             Actor actualActor;
-                            if (!existingActors.isEmpty()) {
-                                actualActor = existingActors.get(0);  // Reuse existing
-                                System.out.println(" Reusing existing actor: " + actualActor.getFirstName() + " " + actualActor.getLastName());
+                            
+                            // Check if actor ID is provided and actor exists
+                            if (actor.getActorId() > 0) {
+                                Actor existingActor = actorDao.findById(connection, actor.getActorId());
+                                if (existingActor != null) {
+                                    actualActor = existingActor;
+                                    System.out.println("✓ Reusing existing actor: " + actualActor.getFirstName() + " " + actualActor.getLastName());
+                                } else {
+                                    // ID provided but not found, create new
+                                    actor.setLastUpdate(LocalDateTime.now());
+                                    int actorId = actorDao.insert(connection, actor);
+                                    actor.setActorId(actorId);
+                                    actualActor = actor;
+                                    System.out.println("✓ Created new actor: " + actualActor.getFirstName() + " " + actualActor.getLastName());
+                                }
                             } else {
+                                // No ID provided, create new actor
                                 actor.setLastUpdate(LocalDateTime.now());
                                 int actorId = actorDao.insert(connection, actor);
                                 actor.setActorId(actorId);
                                 actualActor = actor;
-                                System.out.println(" Created new actor: " + actualActor.getFirstName() + " " + actualActor.getLastName());
+                                System.out.println("✓ Created new actor: " + actualActor.getFirstName() + " " + actualActor.getLastName());
                             }
                             
                             // Insert relationship
@@ -557,63 +550,6 @@ public class FilmManagementService {
         }
     }
     
-    //  GET methods return full film objects with relationships
-    public Map<String, Object> handleFilmQuery(String filmIdParam, String titleParam, String languageIdParam, String actorIdParam, String categoryIdParam) throws SQLException {
-        Map<String, Object> responseData = new HashMap<>();
-        responseData.put("success", true);
-        
-        if (filmIdParam != null) {
-            // Get single film by ID with full relationships
-            int filmId = Integer.parseInt(filmIdParam);
-            Film film = getFilmById(filmId);
-            responseData.put("film", film);
-            responseData.put("message", "Film retrieved successfully");
-            
-        } else if (titleParam != null) {
-            // Get films by title with full relationships
-            List<Film> films = getFilmsByTitle(titleParam);
-            responseData.put("films", films);
-            responseData.put("totalResults", films.size());
-            responseData.put("searchTerm", titleParam);
-            responseData.put("message", films.size() + " films found by title");
-            
-        } else if (languageIdParam != null) {
-            // Get films by language with full relationships
-            int languageId = Integer.parseInt(languageIdParam);
-            List<Film> films = getFilmsByLanguage(languageId);
-            responseData.put("films", films);
-            responseData.put("totalResults", films.size());
-            responseData.put("languageId", languageId);
-            responseData.put("message", films.size() + " films found for language");
-            
-        } else if (actorIdParam != null) {
-            // Get films by actor with full relationships
-            int actorId = Integer.parseInt(actorIdParam);
-            List<Film> films = getFilmsByActor(actorId);
-            responseData.put("films", films);
-            responseData.put("totalResults", films.size());
-            responseData.put("actorId", actorId);
-            responseData.put("message", films.size() + " films found for actor");
-            
-        } else if (categoryIdParam != null) {
-            // Get films by category with full relationships
-            int categoryId = Integer.parseInt(categoryIdParam);
-            List<Film> films = getFilmsByCategory(categoryId);
-            responseData.put("films", films);
-            responseData.put("totalResults", films.size());
-            responseData.put("categoryId", categoryId);
-            responseData.put("message", films.size() + " films found for category");
-            
-        } else {
-            // Get all films with full relationships
-            List<Film> films = getAllFilms();
-            responseData.put("films", films);
-            responseData.put("totalFilms", films.size());
-            responseData.put("message", "All films retrieved successfully");
-        }
-        
-        return responseData;
-    }
     
     public Map<String, Object> handleFilmUpdate(int filmId, Map<String, Object> requestData) throws SQLException {
         Film film = updateFilm(filmId, requestData);

@@ -1,10 +1,17 @@
 package dao;
 
-import model.*;
-import java.sql.*;
-import java.time.LocalDateTime;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
+
+import model.Actor;
+import model.Film;
+import model.FilmActor;
 
 public class FilmActorDao {
     
@@ -57,7 +64,7 @@ public class FilmActorDao {
                 throw new SQLException("Creating film-actor relationship failed, no rows affected.");
             }
             
-            // ✅ FIXED: Get and set the generated ID
+            //  FIXED: Get and set the generated ID
             try (ResultSet generatedKeys = statement.getGeneratedKeys()) {
                 if (generatedKeys.next()) {
                     int filmActorId = generatedKeys.getInt(1);

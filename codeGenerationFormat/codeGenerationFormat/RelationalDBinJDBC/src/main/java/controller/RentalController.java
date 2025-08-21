@@ -96,11 +96,17 @@ public class RentalController extends HttpServlet {
         try {
             Map<String, Object> requestData = objectMapper.readValue(request.getInputStream(), Map.class);
             
+            // Service returns Rental object
+            Rental rental = rentalService.createRental(requestData);
+            
             //  SIMPLE RESPONSE FOR POST (no complex rental object)
-            Map<String, Object> result = rentalService.handleRentalCreation(requestData);
+            Map<String, Object> responseData = new HashMap<>();
+            responseData.put("success", true);
+            responseData.put("rentalId", rental.getRentalId());
+            responseData.put("message", "Rental created successfully");
             
             response.setStatus(HttpServletResponse.SC_CREATED);
-            objectMapper.writeValue(response.getOutputStream(), result);
+            objectMapper.writeValue(response.getOutputStream(), responseData);
             
         } catch (SQLException | IllegalArgumentException e) {
             handleError(response, HttpServletResponse.SC_BAD_REQUEST, e.getMessage());
@@ -122,38 +128,66 @@ public class RentalController extends HttpServlet {
             String rentalIdParam = request.getParameter("rentalId");
             String storeIdParam = request.getParameter("storeId");
             String overdueParam = request.getParameter("overdue");
-            String apiInfo = request.getParameter("info"); //  NEW: Add this parameter
+            String apiInfo = request.getParameter("info");
             
-            Map<String, Object> result;
+            Map<String, Object> responseData = new HashMap<>();
+            responseData.put("success", true);
             
             if (customerIdParam != null) {
+                // GET customer rental history with full relationships
                 int customerId = Integer.parseInt(customerIdParam);
-                result = rentalService.handleCustomerHistoryQuery(customerId);
+                List<Rental> rentals = rentalService.getCustomerRentals(customerId);
+                responseData.put("customerId", customerId);
+                responseData.put("totalRentals", rentals.size());
+                responseData.put("rentals", rentals);
+                responseData.put("message", rentals.size() + " rentals found for customer");
                 
             } else if ("true".equals(activeRentals)) {
-                result = rentalService.handleActiveRentalsQuery();
+                // GET active rentals with full relationships
+                List<Rental> rentals = rentalService.getAllActiveRentals();
+                responseData.put("totalActiveRentals", rentals.size());
+                responseData.put("rentals", rentals);
+                responseData.put("message", rentals.size() + " active rentals found");
                 
             } else if (rentalIdParam != null) {
+                // GET single rental by ID with full relationships
                 int rentalId = Integer.parseInt(rentalIdParam);
-                result = rentalService.handleRentalQuery(rentalId);
+                Rental rental = rentalService.getRentalById(rentalId);
+                responseData.put("rental", rental);
+                responseData.put("message", "Rental retrieved successfully");
                 
             } else if (storeIdParam != null) {
+                // GET rentals by store with full relationships
                 int storeId = Integer.parseInt(storeIdParam);
-                result = rentalService.handleStoreRentalsQuery(storeId);
+                List<Rental> rentals = rentalService.getRentalsByStore(storeId);
+                responseData.put("storeId", storeId);
+                responseData.put("totalRentals", rentals.size());
+                responseData.put("rentals", rentals);
+                responseData.put("message", rentals.size() + " rentals found for store");
                 
             } else if ("true".equals(overdueParam)) {
-                result = rentalService.handleOverdueRentalsQuery();
+                // GET overdue rentals with full relationships
+                List<Rental> rentals = rentalService.getOverdueRentals();
+                responseData.put("totalOverdueRentals", rentals.size());
+                responseData.put("rentals", rentals);
+                responseData.put("message", rentals.size() + " overdue rentals found");
                 
             } else if ("true".equals(apiInfo)) {
-                //  ONLY show API info when explicitly requested
-                result = rentalService.handleApiInformationQuery();
+                // ONLY show API info when explicitly requested
+                Map<String, Object> result = rentalService.handleApiInformationQuery();
+                objectMapper.writeValue(response.getOutputStream(), result);
+                return;
                 
             } else {
-                //  DEFAULT: Show all rentals instead of API info
-                result = rentalService.handleAllRentalsQuery();
+                // DEFAULT: Get all rentals with full relationships (like CustomerController)
+                List<Rental> rentals = rentalService.getAllRentals();
+                responseData.put("totalRentals", rentals.size());
+                responseData.put("rentals", rentals);
+                responseData.put("message", "All rentals retrieved successfully");
             }
             
-            objectMapper.writeValue(response.getOutputStream(), result);
+            //  SAFE SERIALIZATION - Jackson will now ignore circular references
+            objectMapper.writeValue(response.getOutputStream(), responseData);
             
         } catch (SQLException e) {
             handleError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Database error: " + e.getMessage());
@@ -166,7 +200,6 @@ public class RentalController extends HttpServlet {
         }
     }
 
-    
     @Override
     protected void doPut(HttpServletRequest request, HttpServletResponse response) 
             throws IOException {
@@ -179,9 +212,19 @@ public class RentalController extends HttpServlet {
             String rentalIdParam = request.getParameter("rentalId");
             
             if ("return".equals(action) || rentalIdParam != null) {
+                int rentalId = Integer.parseInt(rentalIdParam);
+                Map<String, Object> requestData = objectMapper.readValue(request.getInputStream(), Map.class);
+                
+                // Service returns Rental object
+                Rental rental = rentalService.returnFilm(rentalId, requestData);
+                
                 //  SIMPLE RESPONSE FOR PUT (film return)
-                Map<String, Object> result = rentalService.handleFilmReturn(rentalIdParam, request);
-                objectMapper.writeValue(response.getOutputStream(), result);
+                Map<String, Object> responseData = new HashMap<>();
+                responseData.put("success", true);
+                responseData.put("rentalId", rental.getRentalId());
+                responseData.put("message", "Film returned successfully");
+                
+                objectMapper.writeValue(response.getOutputStream(), responseData);
                 
             } else {
                 handleError(response, HttpServletResponse.SC_BAD_REQUEST, 
@@ -208,15 +251,22 @@ public class RentalController extends HttpServlet {
             if (rentalIdParam != null) {
                 int rentalId = Integer.parseInt(rentalIdParam);
                 
+                // Service returns Rental object
+                Rental rental = rentalService.deleteRental(rentalId);
+                
                 //  SIMPLE RESPONSE FOR DELETE
-                Map<String, Object> result = rentalService.handleRentalDeletion(rentalId);
-                objectMapper.writeValue(response.getOutputStream(), result);
+                Map<String, Object> responseData = new HashMap<>();
+                responseData.put("success", true);
+                responseData.put("rentalId", rentalId);
+                responseData.put("message", "Rental deleted successfully");
+                
+                objectMapper.writeValue(response.getOutputStream(), responseData);
                 
             } else {
                 handleError(response, HttpServletResponse.SC_BAD_REQUEST, "Rental ID is required");
             }
             
-        } catch (SQLException | IllegalArgumentException e) {
+        } catch (SQLException | IllegalArgumentException | IllegalStateException e) {
             handleError(response, HttpServletResponse.SC_BAD_REQUEST, e.getMessage());
         } catch (Exception e) {
             handleError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Internal server error");

@@ -40,17 +40,16 @@ public class FilmDao {
     private static final String DELETE_SQL = 
         "DELETE FROM film WHERE film_id = ?";
     
+    // Insert a new film
     public int insert(Connection connection, Film film) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement(INSERT_SQL, Statement.RETURN_GENERATED_KEYS)) {
             statement.setString(1, film.getTitle());
             statement.setString(2, film.getDescription());
             statement.setInt(3, film.getReleaseYear());
             
-            // Get language ID from Language object (or 0 if null)
             int languageId = (film.getLanguage() != null) ? film.getLanguage().getLanguageId() : 0;
             statement.setInt(4, languageId);
             
-            // Get original language ID from Language object (or null if not set)
             if (film.getOriginalLanguage() != null && film.getOriginalLanguage().getLanguageId() > 0) {
                 statement.setInt(5, film.getOriginalLanguage().getLanguageId());
             } else {
@@ -82,42 +81,126 @@ public class FilmDao {
         }
     }
     
+    // Find film by ID
     public Film findById(Connection connection, int filmId) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement(FIND_BY_ID_SQL)) {
             statement.setInt(1, filmId);
             
-            try (ResultSet resultSet = statement.executeQuery()) {
-                if (resultSet.next()) {
-                    return extractFilmFromResultSet(resultSet);
+            try (ResultSet rs = statement.executeQuery()) {
+                if (rs.next()) {
+                    Film film = new Film();
+                    film.setFilmId(rs.getInt("film_id"));
+                    film.setTitle(rs.getString("title"));
+                    film.setDescription(rs.getString("description"));
+                    film.setReleaseYear(rs.getInt("release_year"));
+                    film.setRentalDuration(rs.getInt("rental_duration"));
+                    film.setRentalRate(rs.getBigDecimal("rental_rate"));
+                    film.setLength(rs.getInt("length"));
+                    film.setReplacementCost(rs.getBigDecimal("replacement_cost"));
+                    film.setRating(rs.getString("rating"));
+                    film.setSpecialFeatures(rs.getString("special_features"));
+                    film.setLastUpdate(rs.getTimestamp("last_update").toLocalDateTime());
+
+                    int languageId = rs.getInt("language_id");
+                    if (languageId > 0) {
+                        Language lang = new Language();
+                        lang.setLanguageId(languageId);
+                        film.setLanguage(lang);
+                    }
+
+                    Integer originalLanguageId = rs.getObject("original_language_id", Integer.class);
+                    if (originalLanguageId != null && originalLanguageId > 0) {
+                        Language origLang = new Language();
+                        origLang.setLanguageId(originalLanguageId);
+                        film.setOriginalLanguage(origLang);
+                    }
+
+                    return film;
                 }
                 return null;
             }
         }
     }
     
+    // Find all films
     public List<Film> findAll(Connection connection) throws SQLException {
         List<Film> films = new ArrayList<>();
         
         try (PreparedStatement statement = connection.prepareStatement(FIND_ALL_SQL);
-             ResultSet resultSet = statement.executeQuery()) {
+             ResultSet rs = statement.executeQuery()) {
             
-            while (resultSet.next()) {
-                films.add(extractFilmFromResultSet(resultSet));
+            while (rs.next()) {
+                Film film = new Film();
+                film.setFilmId(rs.getInt("film_id"));
+                film.setTitle(rs.getString("title"));
+                film.setDescription(rs.getString("description"));
+                film.setReleaseYear(rs.getInt("release_year"));
+                film.setRentalDuration(rs.getInt("rental_duration"));
+                film.setRentalRate(rs.getBigDecimal("rental_rate"));
+                film.setLength(rs.getInt("length"));
+                film.setReplacementCost(rs.getBigDecimal("replacement_cost"));
+                film.setRating(rs.getString("rating"));
+                film.setSpecialFeatures(rs.getString("special_features"));
+                film.setLastUpdate(rs.getTimestamp("last_update").toLocalDateTime());
+
+                int languageId = rs.getInt("language_id");
+                if (languageId > 0) {
+                    Language lang = new Language();
+                    lang.setLanguageId(languageId);
+                    film.setLanguage(lang);
+                }
+
+                Integer originalLanguageId = rs.getObject("original_language_id", Integer.class);
+                if (originalLanguageId != null && originalLanguageId > 0) {
+                    Language origLang = new Language();
+                    origLang.setLanguageId(originalLanguageId);
+                    film.setOriginalLanguage(origLang);
+                }
+
+                films.add(film);
             }
         }
         
         return films;
     }
     
+    // Find films by title
     public List<Film> findByTitle(Connection connection, String title) throws SQLException {
         List<Film> films = new ArrayList<>();
         
         try (PreparedStatement statement = connection.prepareStatement(FIND_BY_TITLE_SQL)) {
             statement.setString(1, "%" + title + "%");
             
-            try (ResultSet resultSet = statement.executeQuery()) {
-                while (resultSet.next()) {
-                    films.add(extractFilmFromResultSet(resultSet));
+            try (ResultSet rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    Film film = new Film();
+                    film.setFilmId(rs.getInt("film_id"));
+                    film.setTitle(rs.getString("title"));
+                    film.setDescription(rs.getString("description"));
+                    film.setReleaseYear(rs.getInt("release_year"));
+                    film.setRentalDuration(rs.getInt("rental_duration"));
+                    film.setRentalRate(rs.getBigDecimal("rental_rate"));
+                    film.setLength(rs.getInt("length"));
+                    film.setReplacementCost(rs.getBigDecimal("replacement_cost"));
+                    film.setRating(rs.getString("rating"));
+                    film.setSpecialFeatures(rs.getString("special_features"));
+                    film.setLastUpdate(rs.getTimestamp("last_update").toLocalDateTime());
+
+                    int languageId = rs.getInt("language_id");
+                    if (languageId > 0) {
+                        Language lang = new Language();
+                        lang.setLanguageId(languageId);
+                        film.setLanguage(lang);
+                    }
+
+                    Integer originalLanguageId = rs.getObject("original_language_id", Integer.class);
+                    if (originalLanguageId != null && originalLanguageId > 0) {
+                        Language origLang = new Language();
+                        origLang.setLanguageId(originalLanguageId);
+                        film.setOriginalLanguage(origLang);
+                    }
+
+                    films.add(film);
                 }
             }
         }
@@ -125,15 +208,43 @@ public class FilmDao {
         return films;
     }
     
+    // Find films by language
     public List<Film> findByLanguageId(Connection connection, int languageId) throws SQLException {
         List<Film> films = new ArrayList<>();
         
         try (PreparedStatement statement = connection.prepareStatement(FIND_BY_LANGUAGE_ID_SQL)) {
             statement.setInt(1, languageId);
             
-            try (ResultSet resultSet = statement.executeQuery()) {
-                while (resultSet.next()) {
-                    films.add(extractFilmFromResultSet(resultSet));
+            try (ResultSet rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    Film film = new Film();
+                    film.setFilmId(rs.getInt("film_id"));
+                    film.setTitle(rs.getString("title"));
+                    film.setDescription(rs.getString("description"));
+                    film.setReleaseYear(rs.getInt("release_year"));
+                    film.setRentalDuration(rs.getInt("rental_duration"));
+                    film.setRentalRate(rs.getBigDecimal("rental_rate"));
+                    film.setLength(rs.getInt("length"));
+                    film.setReplacementCost(rs.getBigDecimal("replacement_cost"));
+                    film.setRating(rs.getString("rating"));
+                    film.setSpecialFeatures(rs.getString("special_features"));
+                    film.setLastUpdate(rs.getTimestamp("last_update").toLocalDateTime());
+
+                    int langId = rs.getInt("language_id");
+                    if (langId > 0) {
+                        Language lang = new Language();
+                        lang.setLanguageId(langId);
+                        film.setLanguage(lang);
+                    }
+
+                    Integer originalLanguageId = rs.getObject("original_language_id", Integer.class);
+                    if (originalLanguageId != null && originalLanguageId > 0) {
+                        Language origLang = new Language();
+                        origLang.setLanguageId(originalLanguageId);
+                        film.setOriginalLanguage(origLang);
+                    }
+
+                    films.add(film);
                 }
             }
         }
@@ -141,17 +252,16 @@ public class FilmDao {
         return films;
     }
     
+    // Update film
     public void update(Connection connection, Film film) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement(UPDATE_SQL)) {
             statement.setString(1, film.getTitle());
             statement.setString(2, film.getDescription());
             statement.setInt(3, film.getReleaseYear());
             
-            // Get language ID from Language object (or 0 if null)
             int languageId = (film.getLanguage() != null) ? film.getLanguage().getLanguageId() : 0;
             statement.setInt(4, languageId);
             
-            // Get original language ID from Language object (or null if not set)
             if (film.getOriginalLanguage() != null && film.getOriginalLanguage().getLanguageId() > 0) {
                 statement.setInt(5, film.getOriginalLanguage().getLanguageId());
             } else {
@@ -174,6 +284,7 @@ public class FilmDao {
         }
     }
     
+    // Delete film
     public void deleteById(Connection connection, int filmId) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement(DELETE_SQL)) {
             statement.setInt(1, filmId);
@@ -183,37 +294,5 @@ public class FilmDao {
                 throw new SQLException("Deleting film failed, no rows affected.");
             }
         }
-    }
-    
-    private Film extractFilmFromResultSet(ResultSet resultSet) throws SQLException {
-        Film film = new Film();
-        film.setFilmId(resultSet.getInt("film_id"));
-        film.setTitle(resultSet.getString("title"));
-        film.setDescription(resultSet.getString("description"));
-        film.setReleaseYear(resultSet.getInt("release_year"));
-        film.setRentalDuration(resultSet.getInt("rental_duration"));
-        film.setRentalRate(resultSet.getBigDecimal("rental_rate"));
-        film.setLength(resultSet.getInt("length"));
-        film.setReplacementCost(resultSet.getBigDecimal("replacement_cost"));
-        film.setRating(resultSet.getString("rating"));
-        film.setSpecialFeatures(resultSet.getString("special_features"));
-        film.setLastUpdate(resultSet.getTimestamp("last_update").toLocalDateTime());
-        
-        // Create placeholder Language objects with IDs for service layer to load full objects
-        int languageId = resultSet.getInt("language_id");
-        if (languageId > 0) {
-            Language tempLanguage = new Language();
-            tempLanguage.setLanguageId(languageId);
-            film.setLanguage(tempLanguage);
-        }
-        
-        Integer originalLanguageId = resultSet.getObject("original_language_id", Integer.class);
-        if (originalLanguageId != null && originalLanguageId > 0) {
-            Language tempOriginalLanguage = new Language();
-            tempOriginalLanguage.setLanguageId(originalLanguageId);
-            film.setOriginalLanguage(tempOriginalLanguage);
-        }
-        
-        return film;
     }
 }

@@ -30,7 +30,6 @@ public class VideoRentalService {
         this.paymentDao = new PaymentDao();
     }
     
-    //  FIXED: This method needs a Connection parameter
     private void validateInventoryAvailable(java.sql.Connection connection, int filmId, int storeId) throws SQLException {
         // Check if inventory exists and is available (not currently rented)
         boolean hasAvailableInventory = inventoryDao.findAvailableInventory(connection, filmId, storeId);
@@ -39,25 +38,28 @@ public class VideoRentalService {
         }
     }
     
-    // Business Logic: Create Rental with Payment - Returns Rental object (like Store pattern)
-    public Rental createRentalWithPayment(Map<String, Object> requestData) throws SQLException {
+    // Business Logic: Create Rental - Returns Rental object
+    public Rental createRental(Map<String, Object> requestData) throws SQLException {
         try {
             return TransactionManager.executeInTransaction(connection -> {
                 System.out.println("🎬 Starting rental creation transaction...");
                 
                 try {
-                    // Extract and validate data
-                    Map<String, Object> rentalData = (Map<String, Object>) requestData.get("rental");
-                    Map<String, Object> paymentData = (Map<String, Object>) requestData.get("payment");
+                    // Handle both nested and flat structure
+                    Map<String, Object> rentalData;
+                    Map<String, Object> paymentData = null;
                     
-                    // Validate required data
-                    if (rentalData == null || paymentData == null) {
-                        throw new IllegalArgumentException("Rental and payment data are required");
+                    if (requestData.containsKey("rental") && requestData.containsKey("payment")) {
+                        // Nested structure
+                        rentalData = (Map<String, Object>) requestData.get("rental");
+                        paymentData = (Map<String, Object>) requestData.get("payment");
+                    } else {
+                        // Flat structure
+                        rentalData = requestData;
                     }
                     
                     // Create objects
                     Rental rental = mapToRental(rentalData);
-                    Payment payment = mapToPayment(paymentData);
                     LocalDateTime returnDate = parseLocalDateTime((String) rentalData.get("returnDate"));
                     
                     // Validate entities exist
@@ -81,7 +83,7 @@ public class VideoRentalService {
                         throw new IllegalArgumentException("Film not found");
                     }
                     
-                    //  Use the fixed validation method
+                    // Validate inventory available for new rentals
                     if (returnDate == null) {
                         validateInventoryAvailable(connection, film.getFilmId(), inventory.getStore().getStoreId());
                     }
@@ -98,6 +100,19 @@ public class VideoRentalService {
                     rental.setRentalId(rentalId);
                     
                     // Create payment
+                    Payment payment;
+                    if (paymentData != null) {
+                        payment = mapToPayment(paymentData);
+                    } else {
+                        // Create default payment
+                        payment = new Payment();
+                        Double paymentAmountDouble = (Double) rentalData.get("paymentAmount");
+                        BigDecimal amount = paymentAmountDouble != null ? 
+                            BigDecimal.valueOf(paymentAmountDouble) : film.getRentalRate();
+                        payment.setAmount(amount);
+                        payment.setPaymentDate(rental.getRentalDate());
+                    }
+                    
                     payment.setCustomer(customer);
                     payment.setStaff(staff);
                     payment.setRental(rental);
@@ -120,9 +135,7 @@ public class VideoRentalService {
                         }
                     }
                     
-                    // Return complete rental with relationships (like Store service)
-                    Rental createdRental = buildRentalWithRelationships(connection, rentalId);
-                    return createdRental;
+                    return buildRentalWithRelationships(connection, rentalId);
                     
                 } catch (Exception e) {
                     throw new RuntimeException("Rental creation failed", e);
@@ -133,64 +146,8 @@ public class VideoRentalService {
         }
     }
     
-    // Business Logic: Create Simple Rental - Returns Rental object
-    public Rental createRental(int customerId, int inventoryId, int staffId, LocalDateTime rentalDate, BigDecimal paymentAmount) throws SQLException {
-        return TransactionManager.executeInTransaction(connection -> {
-            
-            // Validate entities
-            Customer customer = customerDao.findById(connection, customerId);
-            if (customer == null || !customer.isActive()) {
-                throw new IllegalArgumentException("Customer not found or inactive");
-            }
-            
-            Inventory inventory = inventoryDao.findById(connection, inventoryId);
-            if (inventory == null) {
-                throw new IllegalArgumentException("Inventory not found");
-            }
-            
-            Staff staff = staffDao.findById(connection, staffId);
-            if (staff == null || !staff.getActive()) {
-                throw new IllegalArgumentException("Staff not found or inactive");
-            }
-            
-            Film film = filmDao.findById(connection, inventory.getFilm().getFilmId());
-            if (film == null) {
-                throw new IllegalArgumentException("Film not found");
-            }
-            
-            //  Use the fixed validation method
-            validateInventoryAvailable(connection, film.getFilmId(), inventory.getStore().getStoreId());
-            
-            // Create rental
-            Rental rental = new Rental();
-            rental.setCustomer(customer);
-            rental.setInventory(inventory);
-            rental.setStaff(staff);
-            rental.setRentalDate(rentalDate != null ? rentalDate : LocalDateTime.now());
-            rental.setReturnDate(null); // Active rental
-            rental.setLastUpdate(LocalDateTime.now());
-            
-            int rentalId = rentalDao.insert(connection, rental);
-            rental.setRentalId(rentalId);
-            
-            // Create payment
-            BigDecimal amount = paymentAmount != null ? paymentAmount : film.getRentalRate();
-            Payment payment = new Payment();
-            payment.setCustomer(customer);
-            payment.setStaff(staff);
-            payment.setRental(rental);
-            payment.setAmount(amount);
-            payment.setPaymentDate(rental.getRentalDate());
-            payment.setLastUpdate(LocalDateTime.now());
-            paymentDao.insert(connection, payment);
-            
-            Rental createdRental = buildRentalWithRelationships(connection, rentalId);
-            return createdRental;
-        });
-    }
-    
     // Business Logic: Return Film - Returns Rental object
-    public Rental returnFilm(int rentalId) throws SQLException {
+    public Rental returnFilm(int rentalId, Map<String, Object> requestData) throws SQLException {
         return TransactionManager.executeInTransaction(connection -> {
             
             Rental rental = buildRentalWithRelationships(connection, rentalId);
@@ -222,8 +179,33 @@ public class VideoRentalService {
                 paymentDao.insert(connection, lateFeePayment);
             }
             
-            Rental returnedRental = buildRentalWithRelationships(connection, rentalId);
-            return returnedRental;
+            return buildRentalWithRelationships(connection, rentalId);
+        });
+    }
+    
+    // Business Logic: Delete Rental - Returns Rental object
+    public Rental deleteRental(int rentalId) throws SQLException {
+        return TransactionManager.executeInTransaction(connection -> {
+            Rental rental = buildRentalWithRelationships(connection, rentalId);
+            if (rental == null) {
+                throw new IllegalArgumentException("Rental not found with ID: " + rentalId);
+            }
+            
+            // Business rule: Check if film is returned before deletion
+            if (rental.getReturnDate() == null) {
+                throw new IllegalStateException("Cannot delete active rental - film must be returned first");
+            }
+            
+            // Delete related payments first (if any)
+            List<Payment> payments = paymentDao.findByRentalId(connection, rentalId);
+            for (Payment payment : payments) {
+                paymentDao.deleteById(connection, payment.getPaymentId());
+            }
+            
+            // Delete the rental
+            rentalDao.deleteById(connection, rentalId);
+            
+            return rental;
         });
     }
     
@@ -237,6 +219,28 @@ public class VideoRentalService {
             }
             
             return rental;
+        });
+    }
+    
+    // Business Logic: Get All Rentals - Returns List<Rental>
+    public List<Rental> getAllRentals() throws SQLException {
+        return TransactionManager.executeInTransaction(connection -> {
+            List<Rental> allRentals = rentalDao.findAll(connection);
+            List<Rental> allRentalsWithDetails = new ArrayList<>();
+            
+            for (Rental rental : allRentals) {
+                try {
+                    Rental rentalWithDetails = buildRentalWithRelationships(connection, rental.getRentalId());
+                    if (rentalWithDetails != null) {
+                        allRentalsWithDetails.add(rentalWithDetails);
+                    }
+                } catch (Exception e) {
+                    rental.setPaymentList(new ArrayList<>());
+                    allRentalsWithDetails.add(rental);
+                }
+            }
+            
+            return allRentalsWithDetails;
         });
     }
     
@@ -256,7 +260,6 @@ public class VideoRentalService {
                         activeRentalsWithDetails.add(rentalWithDetails);
                     }
                 } catch (Exception e) {
-                    // Add basic rental if relationship loading fails
                     rental.setPaymentList(new ArrayList<>());
                     activeRentalsWithDetails.add(rental);
                 }
@@ -266,8 +269,8 @@ public class VideoRentalService {
         });
     }
     
-    // Business Logic: Get Customer Rental History - Returns List<Rental>
-    public List<Rental> getCustomerRentalHistory(int customerId) throws SQLException {
+    // Business Logic: Get Customer Rentals - Returns List<Rental>
+    public List<Rental> getCustomerRentals(int customerId) throws SQLException {
         return TransactionManager.executeInTransaction(connection -> {
             
             Customer customer = customerDao.findById(connection, customerId);
@@ -294,38 +297,8 @@ public class VideoRentalService {
         });
     }
     
-    //  Handle DELETE rental
-    public Map<String, Object> handleRentalDeletion(int rentalId) throws SQLException {
-        return TransactionManager.executeInTransaction(connection -> {
-            Rental rental = buildRentalWithRelationships(connection, rentalId);
-            if (rental == null) {
-                throw new IllegalArgumentException("Rental not found with ID: " + rentalId);
-            }
-            
-            // Business rule: Check if film is returned before deletion
-            if (rental.getReturnDate() == null) {
-                throw new IllegalStateException("Cannot delete active rental - film must be returned first");
-            }
-            
-            // Delete related payments first (if any)
-            List<Payment> payments = paymentDao.findByRentalId(connection, rentalId);
-            for (Payment payment : payments) {
-                paymentDao.deleteById(connection, payment.getPaymentId());
-            }
-            
-            // Delete the rental
-            rentalDao.deleteById(connection, rentalId);
-
-            Map<String, Object> responseData = new HashMap<>();
-            responseData.put("success", true);
-            responseData.put("rentalId", rentalId);
-            responseData.put("message", "Rental deleted successfully");
-            return responseData;
-        });
-    }
-
-    //  Handle rentals by store
-    public Map<String, Object> handleStoreRentalsQuery(int storeId) throws SQLException {
+    // Business Logic: Get Rentals by Store - Returns List<Rental>
+    public List<Rental> getRentalsByStore(int storeId) throws SQLException {
         return TransactionManager.executeInTransaction(connection -> {
             // Get all rentals where inventory belongs to the specified store
             List<Rental> allRentals = rentalDao.findAll(connection);
@@ -352,22 +325,13 @@ public class VideoRentalService {
                     storeRentalsWithDetails.add(rental);
                 }
             }
-
-            Map<String, Object> responseData = new HashMap<>();
-            responseData.put("success", true);
-            responseData.put("storeId", storeId);
-            responseData.put("totalRentals", storeRentalsWithDetails.size());
-            responseData.put("activeRentals", storeRentalsWithDetails.stream()
-                .mapToLong(r -> r.getReturnDate() == null ? 1 : 0).sum());
-            responseData.put("rentals", storeRentalsWithDetails);
-            responseData.put("message", "Rentals retrieved successfully for store ID " + storeId);
-
-            return responseData;
+            
+            return storeRentalsWithDetails;
         });
     }
-
-    //  Handle overdue rentals
-    public Map<String, Object> handleOverdueRentalsQuery() throws SQLException {
+    
+    // Business Logic: Get Overdue Rentals - Returns List<Rental>
+    public List<Rental> getOverdueRentals() throws SQLException {
         return TransactionManager.executeInTransaction(connection -> {
             List<Rental> allRentals = rentalDao.findAll(connection);
             List<Rental> overdueRentals = new ArrayList<>();
@@ -406,166 +370,12 @@ public class VideoRentalService {
                     overdueRentalsWithDetails.add(rental);
                 }
             }
-
-            Map<String, Object> responseData = new HashMap<>();
-            responseData.put("success", true);
-            responseData.put("totalOverdueRentals", overdueRentalsWithDetails.size());
-            responseData.put("overdueRentals", overdueRentalsWithDetails);
-            responseData.put("message", "Overdue rentals retrieved successfully");
-            responseData.put("checkDate", LocalDateTime.now().toString());
-
-            return responseData;
+            
+            return overdueRentalsWithDetails;
         });
     }
     
-    // Controller Support Methods
-    public Map<String, Object> handleRentalCreation(Map<String, Object> requestData) throws SQLException {
-        try {
-            // Check request structure and delegate to appropriate business method
-            if (requestData.containsKey("rental") && requestData.containsKey("payment")) {
-                // Handle nested structure
-                Rental rental = createRentalWithPayment(requestData);
-                
-                Map<String, Object> responseData = new HashMap<>();
-                responseData.put("success", true);
-                responseData.put("rentalId", rental.getRentalId());
-                responseData.put("message", "Rental and payment created successfully");
-                
-                return responseData;
-                
-            } else {
-                // Handle flat structure
-                Integer customerId = (Integer) requestData.get("customerId");
-                Integer inventoryId = (Integer) requestData.get("inventoryId");
-                Integer staffId = (Integer) requestData.get("staffId");
-                String rentalDateStr = (String) requestData.get("rentalDate");
-                Double paymentAmountDouble = (Double) requestData.get("paymentAmount");
-                
-                if (customerId == null || inventoryId == null || staffId == null) {
-                    throw new IllegalArgumentException("Customer ID, Inventory ID, and Staff ID are required");
-                }
-                
-                LocalDateTime rentalDate = parseLocalDateTime(rentalDateStr);
-                BigDecimal paymentAmount = paymentAmountDouble != null ? BigDecimal.valueOf(paymentAmountDouble) : null;
-                
-                Rental rental = createRental(customerId, inventoryId, staffId, rentalDate, paymentAmount);
-                
-                Map<String, Object> responseData = new HashMap<>();
-                responseData.put("success", true);
-                responseData.put("rentalId", rental.getRentalId());
-                responseData.put("message", "Rental created successfully");
-                
-                return responseData;
-            }
-            
-        } catch (Exception e) {
-            throw new SQLException("Rental creation failed: " + e.getMessage(), e);
-        }
-    }
-    
-    public Map<String, Object> handleRentalQuery(int rentalId) throws SQLException {
-        Rental rental = getRentalById(rentalId);
-        
-        Map<String, Object> responseData = new HashMap<>();
-        responseData.put("success", true);
-        responseData.put("rental", rental);
-        responseData.put("message", "Rental retrieved successfully");
-        
-        return responseData;
-    }
-    
-    public Map<String, Object> handleActiveRentalsQuery() throws SQLException {
-        List<Rental> activeRentals = getAllActiveRentals();
-        
-        Map<String, Object> responseData = new HashMap<>();
-        responseData.put("success", true);
-        responseData.put("totalActiveRentals", activeRentals.size());
-        responseData.put("rentals", activeRentals);
-        responseData.put("message", "All active rentals retrieved successfully");
-        
-        return responseData;
-    }
-    
-    public Map<String, Object> handleCustomerHistoryQuery(int customerId) throws SQLException {
-        List<Rental> rentals = getCustomerRentalHistory(customerId);
-        
-        // Get customer info for response
-        Customer customer = rentals.isEmpty() ? null : rentals.get(0).getCustomer();
-        
-        Map<String, Object> responseData = new HashMap<>();
-        responseData.put("success", true);
-        responseData.put("customerId", customerId);
-        if (customer != null) {
-            responseData.put("customerName", customer.getFirstName() + " " + customer.getLastName());
-        }
-        responseData.put("totalRentals", rentals.size());
-        responseData.put("activeRentals", rentals.stream().mapToLong(r -> r.getReturnDate() == null ? 1 : 0).sum());
-        responseData.put("rentalHistory", rentals);
-        responseData.put("message", "Customer rental history retrieved successfully");
-        
-        return responseData;
-    }
-    
-    public Map<String, Object> handleFilmReturn(String rentalIdParam, jakarta.servlet.http.HttpServletRequest request) throws SQLException {
-        try {
-            if (rentalIdParam == null) {
-                // Try to get from request body
-                Map<String, Object> requestData = new com.fasterxml.jackson.databind.ObjectMapper()
-                    .readValue(request.getInputStream(), Map.class);
-                if (requestData.get("rentalId") != null) {
-                    rentalIdParam = requestData.get("rentalId").toString();
-                }
-            }
-            
-            if (rentalIdParam == null) {
-                throw new IllegalArgumentException("Rental ID is required");
-            }
-            
-            int rentalId = Integer.parseInt(rentalIdParam);
-            Rental returnedRental = returnFilm(rentalId);
-            
-            Map<String, Object> responseData = new HashMap<>();
-            responseData.put("success", true);
-            responseData.put("rentalId", rentalId);
-            responseData.put("message", "Film returned successfully");
-            
-            return responseData;
-            
-        } catch (Exception e) {
-            throw new SQLException("Film return failed: " + e.getMessage(), e);
-        }
-    }
-    
-    //  Handle all rentals query
-    public Map<String, Object> handleAllRentalsQuery() throws SQLException {
-        return TransactionManager.executeInTransaction(connection -> {
-            List<Rental> allRentals = rentalDao.findAll(connection);
-            List<Rental> allRentalsWithDetails = new ArrayList<>();
-            
-            for (Rental rental : allRentals) {
-                try {
-                    Rental rentalWithDetails = buildRentalWithRelationships(connection, rental.getRentalId());
-                    if (rentalWithDetails != null) {
-                        allRentalsWithDetails.add(rentalWithDetails);
-                    }
-                } catch (Exception e) {
-                    rental.setPaymentList(new ArrayList<>());
-                    allRentalsWithDetails.add(rental);
-                }
-            }
-
-            Map<String, Object> responseData = new HashMap<>();
-            responseData.put("success", true);
-            responseData.put("totalRentals", allRentalsWithDetails.size());
-            responseData.put("activeRentals", allRentalsWithDetails.stream()
-                .mapToLong(r -> r.getReturnDate() == null ? 1 : 0).sum());
-            responseData.put("rentals", allRentalsWithDetails);
-            responseData.put("message", "All rentals retrieved successfully");
-
-            return responseData;
-        });
-    }
-    
+    // Keep this method for API info endpoint
     public Map<String, Object> handleApiInformationQuery() {
         Map<String, Object> apiInfo = new HashMap<>();
         apiInfo.put("service", "Video Rental API - Rental Management");

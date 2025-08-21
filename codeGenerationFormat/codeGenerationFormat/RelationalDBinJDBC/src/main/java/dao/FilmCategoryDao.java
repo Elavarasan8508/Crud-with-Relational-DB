@@ -1,10 +1,17 @@
 package dao;
 
-import model.*;
-import java.sql.*;
-import java.time.LocalDateTime;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
+
+import model.Category;
+import model.Film;
+import model.FilmCategory;
 
 public class FilmCategoryDao {
     
@@ -57,11 +64,11 @@ public class FilmCategoryDao {
                 throw new SQLException("Creating film-category relationship failed, no rows affected.");
             }
             
-            // ✅ FIXED: Just return the generated ID (don't set it on the object)
+            //  FIXED: Just return the generated ID (don't set it on the object)
             try (ResultSet generatedKeys = statement.getGeneratedKeys()) {
                 if (generatedKeys.next()) {
                     int filmCategoryId = generatedKeys.getInt(1);
-                    // ✅ REMOVED the problematic line
+                    //  REMOVED the problematic line
                     return filmCategoryId;
                 } else {
                     throw new SQLException("Creating film-category relationship failed, no ID obtained.");

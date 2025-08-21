@@ -9,6 +9,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
+import controller.CustomerController.*;
+import controller.CustomerController.CountryMixin;
+import controller.CustomerController.RentalMixin;
+import controller.CustomerController.StaffMixin;
+import controller.RentalController.FilmMixin;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -19,22 +24,18 @@ import java.util.HashMap;
 import java.util.List;
 
 public class StoreController extends HttpServlet {
-    
+
     private final StoreManagementService storeService;
     private final ObjectMapper objectMapper;
-    
+
     public StoreController() {
         this.storeService = new StoreManagementService();
         this.objectMapper = new ObjectMapper();
-        
-        //  Configure Jackson for LocalDateTime (same as other controllers)
+
         this.objectMapper.registerModule(new JavaTimeModule());
         this.objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-        
-        //  Configure to ignore null values
         this.objectMapper.setSerializationInclusion(JsonInclude.Include.NON_NULL);
-        
-        //  PREVENT INFINITE RECURSION - Add mix-ins to ignore back references
+
         this.objectMapper.addMixIn(Store.class, StoreMixin.class);
         this.objectMapper.addMixIn(Address.class, AddressMixin.class);
         this.objectMapper.addMixIn(Staff.class, StaffMixin.class);
@@ -45,94 +46,51 @@ public class StoreController extends HttpServlet {
         this.objectMapper.addMixIn(Country.class, CountryMixin.class);
         this.objectMapper.addMixIn(Rental.class, RentalMixin.class);
         this.objectMapper.addMixIn(Payment.class, PaymentMixin.class);
-        
-        //  Configure Jackson to handle circular references
         this.objectMapper.configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false);
         this.objectMapper.configure(SerializationFeature.WRITE_SELF_REFERENCES_AS_NULL, true);
     }
-    
-    //  Mix-in classes to ignore circular references WITHOUT modifying POJOs
+
     abstract class StoreMixin {
         @JsonIgnore abstract List<Customer> getCustomerList();
         @JsonIgnore abstract List<Inventory> getInventoryList();
         @JsonIgnore abstract List<Staff> getStaffList();
     }
-    
-    abstract class AddressMixin {
-        @JsonIgnore abstract List<Customer> getCustomerList();
-        @JsonIgnore abstract List<Staff> getStaffList();
-        @JsonIgnore abstract List<Store> getStoreList();
-    }
-    
-    abstract class StaffMixin {
-        @JsonIgnore abstract List<Payment> getPaymentList();
-        @JsonIgnore abstract List<Rental> getRentalList();
-        @JsonIgnore abstract List<Store> getStoreList();
-    }
-    
+
     abstract class CustomerMixin {
         @JsonIgnore abstract List<Payment> getPaymentList();
         @JsonIgnore abstract List<Rental> getRentalList();
     }
-    
-    abstract class InventoryMixin {
-        @JsonIgnore abstract List<Rental> getRentalList();
-    }
-    
-    abstract class FilmMixin {
-        @JsonIgnore abstract List<FilmActor> getFilmActorList();
-        @JsonIgnore abstract List<FilmCategory> getFilmCategoryList();
-        @JsonIgnore abstract List<Inventory> getInventoryList();
-    }
-    
-    abstract class CityMixin {
-        @JsonIgnore abstract List<Address> getAddressList();
-    }
-    
-    abstract class CountryMixin {
-        @JsonIgnore abstract List<City> getCityList();
-    }
-    
-    abstract class RentalMixin {
-        @JsonIgnore abstract List<Payment> getPaymentList();
-    }
-    
-    abstract class PaymentMixin {
-        @JsonIgnore abstract Customer getCustomer();
-        @JsonIgnore abstract Staff getStaff();
-        @JsonIgnore abstract Rental getRental();
-    }
-    
+
+
     @Override
-    protected void doPost(HttpServletRequest request, HttpServletResponse response) 
+    protected void doPost(HttpServletRequest request, HttpServletResponse response)
             throws IOException {
-        
         response.setContentType("application/json");
         response.setCharacterEncoding("UTF-8");
-        
         try {
             Map<String, Object> requestData = objectMapper.readValue(request.getInputStream(), Map.class);
-            
-            //  SIMPLE RESPONSE FOR POST (no complex store object)
-            Map<String, Object> result = storeService.handleStoreCreation(requestData);
-            
+
+            Store createdStore = storeService.createStore(requestData);
+
+            Map<String, Object> responseData = new HashMap<>();
+            responseData.put("success", true);
+            responseData.put("storeId", createdStore.getStoreId());
+            responseData.put("message", "Store created successfully");
+
             response.setStatus(HttpServletResponse.SC_CREATED);
-            objectMapper.writeValue(response.getOutputStream(), result);
-            
+            objectMapper.writeValue(response.getOutputStream(), responseData);
         } catch (SQLException | IllegalArgumentException e) {
             handleError(response, HttpServletResponse.SC_BAD_REQUEST, e.getMessage());
         } catch (Exception e) {
             handleError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Internal server error");
         }
     }
-    
+
     @Override
-    protected void doGet(HttpServletRequest request, HttpServletResponse response) 
+    protected void doGet(HttpServletRequest request, HttpServletResponse response)
             throws IOException {
-        
         response.setContentType("application/json");
         response.setCharacterEncoding("UTF-8");
-        
         try {
             String storeIdParam = request.getParameter("storeId");
             String inventory = request.getParameter("inventory");
@@ -140,45 +98,39 @@ public class StoreController extends HttpServlet {
             String staff = request.getParameter("staff");
             String rentals = request.getParameter("rentals");
             String city = request.getParameter("city");
-            
-            Map<String, Object> result;
-            
+
             if (storeIdParam != null) {
                 int storeId = Integer.parseInt(storeIdParam);
-                
+
                 if ("true".equals(inventory)) {
-                    //  GET store inventory with full relationships
-                    result = storeService.handleInventoryQuery(storeId);
-                    
+                    List<Map<String, Object>> inventories = storeService.getStoreInventory(storeId);
+                    objectMapper.writeValue(response.getOutputStream(), inventories);
+
                 } else if ("true".equals(customers)) {
-                    //  GET store customers with full relationships
-                    result = storeService.handleStoreCustomersQuery(storeId);
-                    
+                    List<Customer> customerList = storeService.getStoreCustomers(storeId);
+                    objectMapper.writeValue(response.getOutputStream(), customerList);
+
                 } else if ("true".equals(staff)) {
-                    //  GET store staff with full relationships
-                    result = storeService.handleStoreStaffQuery(storeId);
-                    
+                    List<Staff> staffList = storeService.getStoreStaff(storeId);
+                    objectMapper.writeValue(response.getOutputStream(), staffList);
+
                 } else if ("true".equals(rentals)) {
-                    //  GET store rentals with full relationships
-                    result = storeService.handleStoreRentalsQuery(storeId);
-                    
+                    List<Rental> rentalList = storeService.getStoreRentals(storeId);
+                    objectMapper.writeValue(response.getOutputStream(), rentalList);
+
                 } else {
-                    //  GET single store with full relationships
-                    result = storeService.handleStoreQuery(storeId);
+                    Store store = storeService.getStoreById(storeId);
+                    objectMapper.writeValue(response.getOutputStream(), store);
                 }
-                
+
             } else if (city != null) {
-                //  GET stores by city with full relationships
-                result = storeService.handleStoresByCityQuery(city);
-                
+                List<Store> stores = storeService.getStoresByCity(city);
+                objectMapper.writeValue(response.getOutputStream(), stores);
+
             } else {
-                //  GET all stores with full relationships
-                result = storeService.handleAllStoresQuery();
+                List<Store> stores = storeService.getAllStores();
+                objectMapper.writeValue(response.getOutputStream(), stores);
             }
-            
-            //  SAFE SERIALIZATION - Jackson will now ignore circular references
-            objectMapper.writeValue(response.getOutputStream(), result);
-            
         } catch (SQLException e) {
             handleError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Database error: " + e.getMessage());
         } catch (NumberFormatException e) {
@@ -189,74 +141,70 @@ public class StoreController extends HttpServlet {
             handleError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Serialization error: " + e.getMessage());
         }
     }
-    
+
     @Override
-    protected void doPut(HttpServletRequest request, HttpServletResponse response) 
+    protected void doPut(HttpServletRequest request, HttpServletResponse response)
             throws IOException {
-        
         response.setContentType("application/json");
         response.setCharacterEncoding("UTF-8");
-        
         try {
             String storeIdParam = request.getParameter("storeId");
-            
             if (storeIdParam != null) {
                 int storeId = Integer.parseInt(storeIdParam);
                 Map<String, Object> requestData = objectMapper.readValue(request.getInputStream(), Map.class);
-                
-                //  SIMPLE RESPONSE FOR PUT (no complex store object)
-                Map<String, Object> result = storeService.handleStoreUpdate(storeId, requestData);
-                objectMapper.writeValue(response.getOutputStream(), result);
-                
+                Store updatedStore = storeService.updateStore(storeId, requestData);
+
+                Map<String, Object> responseData = new HashMap<>();
+                responseData.put("success", true);
+                responseData.put("storeId", updatedStore.getStoreId());
+                responseData.put("message", "Store updated successfully");
+                objectMapper.writeValue(response.getOutputStream(), responseData);
+
             } else {
                 handleError(response, HttpServletResponse.SC_BAD_REQUEST, "Store ID is required");
             }
-            
         } catch (SQLException | IllegalArgumentException e) {
             handleError(response, HttpServletResponse.SC_BAD_REQUEST, e.getMessage());
         } catch (Exception e) {
             handleError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Internal server error");
         }
     }
-    
+
     @Override
-    protected void doDelete(HttpServletRequest request, HttpServletResponse response) 
+    protected void doDelete(HttpServletRequest request, HttpServletResponse response)
             throws IOException {
-        
         response.setContentType("application/json");
         response.setCharacterEncoding("UTF-8");
-        
         try {
             String storeIdParam = request.getParameter("storeId");
-            
             if (storeIdParam != null) {
                 int storeId = Integer.parseInt(storeIdParam);
-                
-                //  SIMPLE RESPONSE FOR DELETE (no complex store object)
-                Map<String, Object> result = storeService.handleStoreDeletion(storeId);
-                objectMapper.writeValue(response.getOutputStream(), result);
-                
+                Store deletedStore = storeService.deleteStore(storeId);
+                Map<String, Object> responseData = new HashMap<>();
+                responseData.put("success", true);
+                responseData.put("storeId", storeId);
+                responseData.put("message", "Store deleted successfully");
+                objectMapper.writeValue(response.getOutputStream(), responseData);
+
             } else {
                 handleError(response, HttpServletResponse.SC_BAD_REQUEST, "Store ID is required");
             }
-            
         } catch (SQLException | IllegalArgumentException e) {
             handleError(response, HttpServletResponse.SC_BAD_REQUEST, e.getMessage());
         } catch (Exception e) {
             handleError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Internal server error");
         }
     }
-    
+
     private void handleError(HttpServletResponse response, int status, String message) throws IOException {
         response.setStatus(status);
         Map<String, Object> errorResponse = new HashMap<>();
         errorResponse.put("success", false);
         errorResponse.put("error", message);
-        
+
         try {
             objectMapper.writeValue(response.getOutputStream(), errorResponse);
         } catch (Exception e) {
-            // Fallback if even error serialization fails
             response.getWriter().write("{\"success\":false,\"error\":\"" + message + "\"}");
         }
     }

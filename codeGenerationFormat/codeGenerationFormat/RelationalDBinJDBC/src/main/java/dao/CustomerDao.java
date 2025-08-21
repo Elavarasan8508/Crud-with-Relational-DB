@@ -81,7 +81,7 @@ public class CustomerDao {
         }
     }
     
-    // ✅ ADD THIS - Alias for camelCase
+    //  ADD THIS - Alias for camelCase
     public Customer findById(Connection connection, int customerId) throws SQLException {
         return findByID(connection, customerId);
     }
@@ -117,7 +117,7 @@ public class CustomerDao {
         return customers;
     }
     
-    // ✅ ADD THIS - Alias for camelCase
+    //  ADD THIS - Alias for camelCase
     public List<Customer> findByStoreId(Connection connection, int storeId) throws SQLException {
         return findByStoreID(connection, storeId);
     }
@@ -160,7 +160,7 @@ public class CustomerDao {
         }
     }
     
-    // ✅ ADD THIS - Alias for camelCase
+    //  ADD THIS - Alias for camelCase
     public void deleteById(Connection connection, int customerId) throws SQLException {
         deleteByID(connection, customerId);
     }
