@@ -13,6 +13,8 @@ public class Inventory {
     private Rental inventory;
 
     private LocalDateTime lastUpdate;
+    private Integer filmId;
+    private Integer storeId;
 
     private List<Rental> rentalList;
 
@@ -62,6 +64,22 @@ public class Inventory {
 
 	public void setRentalList(List<Rental> rentalList) {
 		this.rentalList = rentalList;
+	}
+
+	public Integer getFilmId() {
+		return filmId;
+	}
+
+	public void setFilmId(Integer filmId) {
+		this.filmId = filmId;
+	}
+
+	public Integer getStoreId() {
+		return storeId;
+	}
+
+	public void setStoreId(Integer storeId) {
+		this.storeId = storeId;
 	}
 
 	public static class Builder {

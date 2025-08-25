@@ -1,212 +1,160 @@
 package dao;
 
-import model.*;
 import java.sql.*;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import model.*;
 
 public class StaffDao {
-    
-    private static final String INSERT_SQL = 
-        "INSERT INTO staff (first_name, last_name, address_id, email, store_id, active, username, password, last_update) " +
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
-    
-    private static final String FIND_BY_ID_SQL = 
-        "SELECT staff_id, first_name, last_name, address_id, email, store_id, active, username, password, last_update " +
-        "FROM staff WHERE staff_id = ?";
-    
-    private static final String FIND_ALL_SQL = 
-        "SELECT staff_id, first_name, last_name, address_id, email, store_id, active, username, password, last_update " +
-        "FROM staff ORDER BY staff_id";
-    
-    private static final String FIND_BY_STORE_ID_SQL = 
-        "SELECT staff_id, first_name, last_name, address_id, email, store_id, active, username, password, last_update " +
-        "FROM staff WHERE store_id = ? ORDER BY last_name, first_name";
-    
-    private static final String UPDATE_SQL = 
-        "UPDATE staff SET first_name = ?, last_name = ?, address_id = ?, email = ?, store_id = ?, " +
-        "active = ?, username = ?, password = ?, last_update = ? WHERE staff_id = ?";
-    
-    private static final String DELETE_SQL = 
-        "DELETE FROM staff WHERE staff_id = ?";
-    
-    public int insert(Connection connection, Staff staff) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement(INSERT_SQL, Statement.RETURN_GENERATED_KEYS)) {
-            statement.setString(1, staff.getFirstName());
-            statement.setString(2, staff.getLastName());
-            
-            // Extract address ID from Address object
+
+    private static final String INSERT_SQL = "INSERT INTO staff (first_name, last_name, address_id, email, store_id, active, username, password, last_update, picture) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+
+    private static final String SELECT_BY_ID_SQL = "SELECT * FROM staff WHERE staff_id = ?";
+
+    private static final String SELECT_ALL_SQL = "SELECT * FROM staff ORDER BY staff_id";
+
+    private static final String SELECT_BY_ADDRESS_ID_SQL = "SELECT * FROM staff WHERE address_id = ?";
+
+    private static final String SELECT_BY_STORE_ID_SQL = "SELECT * FROM staff WHERE store_id = ?";
+
+    private static final String UPDATE_SQL = "UPDATE staff SET first_name = ?, last_name = ?, address_id = ?, email = ?, store_id = ?, active = ?, username = ?, password = ?, last_update = ?, picture = ? WHERE staff_id = ?";
+
+    private static final String DELETE_SQL = "DELETE FROM staff WHERE staff_id = ?";
+
+    public int insert(Connection conn, Staff staff) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement(INSERT_SQL, Statement.RETURN_GENERATED_KEYS)) {
+            ps.setString(1, staff.getFirstName());
+            ps.setString(2, staff.getLastName());
             if (staff.getAddress() != null && staff.getAddress().getAddressId() > 0) {
-                statement.setInt(3, staff.getAddress().getAddressId());
+                ps.setInt(3, staff.getAddress().getAddressId());
             } else {
-                statement.setNull(3, java.sql.Types.INTEGER);
+                ps.setNull(3, Types.INTEGER);
             }
-            
-            statement.setString(4, staff.getEmail());
-            
-            // Extract store ID from Store object
+            ps.setString(4, staff.getEmail());
             if (staff.getStore() != null && staff.getStore().getStoreId() > 0) {
-                statement.setInt(5, staff.getStore().getStoreId());
+                ps.setInt(5, staff.getStore().getStoreId());
             } else {
-                statement.setNull(5, java.sql.Types.INTEGER);
+                ps.setNull(5, Types.INTEGER);
             }
-            
-            statement.setBoolean(6, staff.getActive());
-            statement.setString(7, staff.getUsername());
-            statement.setString(8, staff.getPassword());
-            
-            // Use provided LocalDateTime or current time
-            if (staff.getLastUpdate() != null) {
-                statement.setTimestamp(9, Timestamp.valueOf(staff.getLastUpdate()));
-            } else {
-                statement.setTimestamp(9, new Timestamp(System.currentTimeMillis()));
-            }
-            
-            int rowsAffected = statement.executeUpdate();
-            if (rowsAffected == 0) {
-                throw new SQLException("Creating staff failed, no rows affected.");
-            }
-            
-            try (ResultSet generatedKeys = statement.getGeneratedKeys()) {
-                if (generatedKeys.next()) {
-                    int staffId = generatedKeys.getInt(1);
-                    staff.setStaffId(staffId);
-                    return staffId;
-                } else {
-                    throw new SQLException("Creating staff failed, no ID obtained.");
+            ps.setBoolean(6, staff.getActive());
+            ps.setString(7, staff.getUsername());
+            ps.setString(8, staff.getPassword());
+            ps.setTimestamp(9, Timestamp.valueOf(staff.getLastUpdate() != null ? staff.getLastUpdate() : java.time.LocalDateTime.now()));
+            ps.setString(10, staff.getPicture());
+            ps.executeUpdate();
+            try (ResultSet rs = ps.getGeneratedKeys()) {
+                if (rs.next()) {
+                    int id = rs.getInt(1);
+                    staff.setStaffId(id);
+                    return id;
                 }
             }
         }
+        return -1;
     }
-    
-    public Staff findById(Connection connection, int staffId) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement(FIND_BY_ID_SQL)) {
-            statement.setInt(1, staffId);
-            
-            try (ResultSet resultSet = statement.executeQuery()) {
-                if (resultSet.next()) {
-                    return extractStaffFromResultSet(resultSet);
-                }
-                return null;
+
+    public Staff findById(Connection conn, int id) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement(SELECT_BY_ID_SQL)) {
+            ps.setInt(1, id);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? extract(rs) : null;
             }
         }
     }
-    
-    public List<Staff> findAll(Connection connection) throws SQLException {
-        List<Staff> staffList = new ArrayList<>();
-        
-        try (PreparedStatement statement = connection.prepareStatement(FIND_ALL_SQL);
-             ResultSet resultSet = statement.executeQuery()) {
-            
-            while (resultSet.next()) {
-                staffList.add(extractStaffFromResultSet(resultSet));
+
+    public List<Staff> findAll(Connection conn) throws SQLException {
+        List<Staff> list = new ArrayList<>();
+        try (PreparedStatement ps = conn.prepareStatement(SELECT_ALL_SQL);
+            ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                list.add(extract(rs));
             }
         }
-        
-        return staffList;
+        return list;
     }
-    
-    public List<Staff> findByStoreId(Connection connection, int storeId) throws SQLException {
-        List<Staff> staffList = new ArrayList<>();
-        
-        try (PreparedStatement statement = connection.prepareStatement(FIND_BY_STORE_ID_SQL)) {
-            statement.setInt(1, storeId);
-            
-            try (ResultSet resultSet = statement.executeQuery()) {
-                while (resultSet.next()) {
-                    staffList.add(extractStaffFromResultSet(resultSet));
-                }
-            }
-        }
-        
-        return staffList;
-    }
-    
-    public void update(Connection connection, Staff staff) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement(UPDATE_SQL)) {
-            statement.setString(1, staff.getFirstName());
-            statement.setString(2, staff.getLastName());
-            
-            // Extract address ID from Address object
+
+    public boolean update(Connection conn, Staff staff) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement(UPDATE_SQL)) {
+            ps.setString(1, staff.getFirstName());
+            ps.setString(2, staff.getLastName());
             if (staff.getAddress() != null && staff.getAddress().getAddressId() > 0) {
-                statement.setInt(3, staff.getAddress().getAddressId());
+                ps.setInt(3, staff.getAddress().getAddressId());
             } else {
-                statement.setNull(3, java.sql.Types.INTEGER);
+                ps.setNull(3, Types.INTEGER);
             }
-            
-            statement.setString(4, staff.getEmail());
-            
-            // Extract store ID from Store object
+            ps.setString(4, staff.getEmail());
             if (staff.getStore() != null && staff.getStore().getStoreId() > 0) {
-                statement.setInt(5, staff.getStore().getStoreId());
+                ps.setInt(5, staff.getStore().getStoreId());
             } else {
-                statement.setNull(5, java.sql.Types.INTEGER);
+                ps.setNull(5, Types.INTEGER);
             }
-            
-            statement.setBoolean(6, staff.getActive());
-            statement.setString(7, staff.getUsername());
-            statement.setString(8, staff.getPassword());
-            
-            // Use provided LocalDateTime or current time
-            if (staff.getLastUpdate() != null) {
-                statement.setTimestamp(9, Timestamp.valueOf(staff.getLastUpdate()));
-            } else {
-                statement.setTimestamp(9, new Timestamp(System.currentTimeMillis()));
-            }
-            
-            statement.setInt(10, staff.getStaffId());
-            
-            int rowsAffected = statement.executeUpdate();
-            if (rowsAffected == 0) {
-                throw new SQLException("Updating staff failed, no rows affected.");
-            }
+            ps.setBoolean(6, staff.getActive());
+            ps.setString(7, staff.getUsername());
+            ps.setString(8, staff.getPassword());
+            ps.setTimestamp(9, Timestamp.valueOf(staff.getLastUpdate() != null ? staff.getLastUpdate() : java.time.LocalDateTime.now()));
+            ps.setString(10, staff.getPicture());
+            ps.setInt(11, staff.getStaffId());
+            return ps.executeUpdate() > 0;
         }
     }
-    
-    public void deleteById(Connection connection, int staffId) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement(DELETE_SQL)) {
-            statement.setInt(1, staffId);
-            
-            int rowsAffected = statement.executeUpdate();
-            if (rowsAffected == 0) {
-                throw new SQLException("Deleting staff failed, no rows affected.");
-            }
+
+    public boolean deleteById(Connection conn, int id) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement(DELETE_SQL)) {
+            ps.setInt(1, id);
+            return ps.executeUpdate() > 0;
         }
     }
-    
-    private Staff extractStaffFromResultSet(ResultSet resultSet) throws SQLException {
+
+    public List<Staff> findByAddressId(Connection conn, int addressID) throws SQLException {
+        List<Staff> list = new ArrayList<>();
+        try (PreparedStatement ps = conn.prepareStatement(SELECT_BY_ADDRESS_ID_SQL)) {
+            ps.setInt(1, addressID);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) list.add(extract(rs));
+            }
+        }
+        return list;
+    }
+
+    public List<Staff> findByStoreId(Connection conn, int storeID) throws SQLException {
+        List<Staff> list = new ArrayList<>();
+        try (PreparedStatement ps = conn.prepareStatement(SELECT_BY_STORE_ID_SQL)) {
+            ps.setInt(1, storeID);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) list.add(extract(rs));
+            }
+        }
+        return list;
+    }
+
+    private Staff extract(ResultSet rs) throws SQLException {
         Staff staff = new Staff();
-        staff.setStaffId(resultSet.getInt("staff_id"));
-        staff.setFirstName(resultSet.getString("first_name"));
-        staff.setLastName(resultSet.getString("last_name"));
-        staff.setEmail(resultSet.getString("email"));
-        staff.setActive(resultSet.getBoolean("active"));
-        staff.setUsername(resultSet.getString("username"));
-        staff.setPassword(resultSet.getString("password"));
-        
-        // Convert Timestamp to LocalDateTime
-        Timestamp lastUpdate = resultSet.getTimestamp("last_update");
-        if (lastUpdate != null) {
-            staff.setLastUpdate(lastUpdate.toLocalDateTime());
+        Integer staff_id = rs.getObject("staff_id", Integer.class);
+        staff.setStaffId(staff_id);
+        staff.setFirstName(rs.getString("first_name"));
+        staff.setLastName(rs.getString("last_name"));
+        Integer address_id = rs.getObject("address_id", Integer.class);
+        staff.setAddressId(address_id);
+        if (address_id != null && address_id > 0) {
+            Address address = new Address();
+            address.setAddressId(address_id);
+            staff.setAddress(address);
         }
-        
-        // Create placeholder Address object with ID for service layer to load full object
-        int addressId = resultSet.getInt("address_id");
-        if (addressId > 0) {
-            Address tempAddress = new Address();
-            tempAddress.setAddressId(addressId);
-            staff.setAddress(tempAddress);
+        staff.setEmail(rs.getString("email"));
+        Integer store_id = rs.getObject("store_id", Integer.class);
+        staff.setStoreId(store_id);
+        if (store_id != null && store_id > 0) {
+            Store store = new Store();
+            store.setStoreId(store_id);
+            staff.setStore(store);
         }
-        
-        // Create placeholder Store object with ID for service layer to load full object
-        int storeId = resultSet.getInt("store_id");
-        if (storeId > 0) {
-            Store tempStore = new Store();
-            tempStore.setStoreId(storeId);
-            staff.setStore(tempStore);
-        }
-        
+        staff.setActive(rs.getBoolean("active"));
+        staff.setUsername(rs.getString("username"));
+        staff.setPassword(rs.getString("password"));
+        Timestamp last_update = rs.getTimestamp("last_update");
+        if (last_update != null)
+            staff.setLastUpdate(last_update.toLocalDateTime());
+        staff.setPicture(rs.getString("picture"));
         return staff;
     }
 }

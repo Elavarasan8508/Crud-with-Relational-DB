@@ -15,7 +15,9 @@ public class Rental {
     private LocalDateTime rentalDate;
 
     private LocalDateTime returnDate;
-
+    private Integer inventoryId;
+    private Integer staffId;
+    private Integer customerId;
     private LocalDateTime lastUpdate;
 
     private List<Payment> paymentList;
@@ -82,6 +84,30 @@ public class Rental {
 
 	public void setPaymentList(List<Payment> paymentList) {
 		this.paymentList = paymentList;
+	}
+
+	public Integer getInventoryId() {
+		return inventoryId;
+	}
+
+	public void setInventoryId(Integer inventoryId) {
+		this.inventoryId = inventoryId;
+	}
+
+	public Integer getStaffId() {
+		return staffId;
+	}
+
+	public void setStaffId(Integer staffId) {
+		this.staffId = staffId;
+	}
+
+	public Integer getCustomerId() {
+		return customerId;
+	}
+
+	public void setCustomerId(Integer customerId) {
+		this.customerId = customerId;
 	}
 
 	public static class Builder {

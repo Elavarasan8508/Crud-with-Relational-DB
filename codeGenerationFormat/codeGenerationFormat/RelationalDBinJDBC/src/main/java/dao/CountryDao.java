@@ -1,115 +1,82 @@
 package dao;
 
-import model.Country;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
+import model.*;
 
 public class CountryDao {
-    
-    private static final String INSERT_SQL = 
-        "INSERT INTO country (country, last_update) VALUES (?, ?)";
-    
-    private static final String FIND_BY_ID_SQL = 
-        "SELECT country_id, country, last_update FROM country WHERE country_id = ?";
-    
-    private static final String FIND_ALL_SQL = 
-        "SELECT country_id, country, last_update FROM country ORDER BY country_id";
-    
-    private static final String UPDATE_SQL = 
-        "UPDATE country SET country = ?, last_update = ? WHERE country_id = ?";
-    
-    private static final String DELETE_SQL = 
-        "DELETE FROM country WHERE country_id = ?";
-    
 
-    // Create
-    public int insert(Connection connection, Country country) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement(
-                INSERT_SQL, Statement.RETURN_GENERATED_KEYS)) {
-            
-            statement.setString(1, country.getCountry());
-            statement.setTimestamp(2, country.getLastUpdate() != null
-                    ? Timestamp.valueOf(country.getLastUpdate())
-                    : new Timestamp(System.currentTimeMillis()));
+    private static final String INSERT_SQL = "INSERT INTO country (country, last_update) VALUES (?, ?)";
 
-            int rowsAffected = statement.executeUpdate();
-            if (rowsAffected == 0) {
-                throw new SQLException("Inserting country failed, no rows affected.");
-            }
+    private static final String SELECT_BY_ID_SQL = "SELECT * FROM country WHERE country_id = ?";
 
-            try (ResultSet keys = statement.getGeneratedKeys()) {
-                if (keys.next()) {
-                    int id = keys.getInt(1);
+    private static final String SELECT_ALL_SQL = "SELECT * FROM country ORDER BY country_id";
+
+    private static final String UPDATE_SQL = "UPDATE country SET country = ?, last_update = ? WHERE country_id = ?";
+
+    private static final String DELETE_SQL = "DELETE FROM country WHERE country_id = ?";
+
+    public int insert(Connection conn, Country country) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement(INSERT_SQL, Statement.RETURN_GENERATED_KEYS)) {
+            ps.setString(1, country.getCountry());
+            ps.setTimestamp(2, Timestamp.valueOf(country.getLastUpdate() != null ? country.getLastUpdate() : java.time.LocalDateTime.now()));
+            ps.executeUpdate();
+            try (ResultSet rs = ps.getGeneratedKeys()) {
+                if (rs.next()) {
+                    int id = rs.getInt(1);
                     country.setCountryId(id);
                     return id;
-                } else {
-                    throw new SQLException("Inserting country failed, no ID obtained.");
                 }
+            }
+        }
+        return -1;
+    }
+
+    public Country findById(Connection conn, int id) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement(SELECT_BY_ID_SQL)) {
+            ps.setInt(1, id);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? extract(rs) : null;
             }
         }
     }
 
-    // Read (by ID)
-    public Country findById(Connection connection, int countryId) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement(FIND_BY_ID_SQL)) {
-            statement.setInt(1, countryId);
-            try (ResultSet rs = statement.executeQuery()) {
-                if (rs.next()) {
-                    Country country = new Country();
-                    country.setCountryId(rs.getInt("country_id"));
-                    country.setCountry(rs.getString("country"));
-                    Timestamp ts = rs.getTimestamp("last_update");
-                    if (ts != null) country.setLastUpdate(ts.toLocalDateTime());
-                    return country;
-                }
-                return null;
-            }
-        }
-    }
-
-    // Read (all)
-    public List<Country> findAll(Connection connection) throws SQLException {
-        List<Country> countries = new ArrayList<>();
-        try (PreparedStatement statement = connection.prepareStatement(FIND_ALL_SQL);
-             ResultSet rs = statement.executeQuery()) {
-            
+    public List<Country> findAll(Connection conn) throws SQLException {
+        List<Country> list = new ArrayList<>();
+        try (PreparedStatement ps = conn.prepareStatement(SELECT_ALL_SQL);
+            ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {
-                Country country = new Country();
-                country.setCountryId(rs.getInt("country_id"));
-                country.setCountry(rs.getString("country"));
-                Timestamp ts = rs.getTimestamp("last_update");
-                if (ts != null) country.setLastUpdate(ts.toLocalDateTime());
-                countries.add(country);
+                list.add(extract(rs));
             }
         }
-        return countries;
+        return list;
     }
 
-    // Update
-    public void update(Connection connection, Country country) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement(UPDATE_SQL)) {
-            statement.setString(1, country.getCountry());
-            statement.setTimestamp(2, country.getLastUpdate() != null
-                    ? Timestamp.valueOf(country.getLastUpdate())
-                    : new Timestamp(System.currentTimeMillis()));
-            statement.setInt(3, country.getCountryId());
-
-            int rows = statement.executeUpdate();
-            if (rows == 0) {
-                throw new SQLException("Updating country failed, no rows affected.");
-            }
+    public boolean update(Connection conn, Country country) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement(UPDATE_SQL)) {
+            ps.setString(1, country.getCountry());
+            ps.setTimestamp(2, Timestamp.valueOf(country.getLastUpdate() != null ? country.getLastUpdate() : java.time.LocalDateTime.now()));
+            ps.setInt(3, country.getCountryId());
+            return ps.executeUpdate() > 0;
         }
     }
 
-    // Delete
-    public void deleteById(Connection connection, int countryId) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement(DELETE_SQL)) {
-            statement.setInt(1, countryId);
-            int rows = statement.executeUpdate();
-            if (rows == 0) {
-                throw new SQLException("Deleting country failed, no rows affected.");
-            }
+    public boolean deleteById(Connection conn, int id) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement(DELETE_SQL)) {
+            ps.setInt(1, id);
+            return ps.executeUpdate() > 0;
         }
+    }
+
+    private Country extract(ResultSet rs) throws SQLException {
+        Country country = new Country();
+        Integer country_id = rs.getObject("country_id", Integer.class);
+        country.setCountryId(country_id);
+        country.setCountry(rs.getString("country"));
+        Timestamp last_update = rs.getTimestamp("last_update");
+        if (last_update != null)
+            country.setLastUpdate(last_update.toLocalDateTime());
+        return country;
     }
 }

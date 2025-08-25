@@ -69,27 +69,33 @@ public class FilmController extends HttpServlet {
         response.setCharacterEncoding("UTF-8");
         
         try {
-            String pathInfo = request.getPathInfo(); // Gets /1/inventory/3 from URL
+            String pathInfo = request.getPathInfo(); // Gets /10/inventory/2 from URL
             
-            if (pathInfo != null && pathInfo.contains("/inventory/")) {
-                // Handle inventory creation: POST /films/1/inventory/3
-                handleInventoryCreation(pathInfo, request, response);
-            } else {
-                // Handle regular film creation: POST /films
-                Map<String, Object> requestData = objectMapper.readValue(request.getInputStream(), Map.class);
-                
-                // Service returns Film object
-                Film film = filmService.createFilm(requestData);
-                
-                //  SIMPLE RESPONSE FOR POST (no complex object)
-                Map<String, Object> responseData = new HashMap<>();
-                responseData.put("success", true);
-                responseData.put("filmId", film.getFilmId());
-                responseData.put("message", "Film created successfully");
-                
-                response.setStatus(HttpServletResponse.SC_CREATED);
-                objectMapper.writeValue(response.getOutputStream(), responseData);
+            // Check for inventory creation: /filmId/inventory/storeId OR /filmId/inventory
+            if (pathInfo != null) {
+                String[] parts = pathInfo.split("/");
+                if (parts.length == 4 && "inventory".equals(parts[2])) {
+                    // Case: /films/10/inventory/2 (storeId in URL)
+                    handleInventoryCreationWithStoreInURL(pathInfo, request, response);
+                    return;
+                } else if (parts.length == 3 && "inventory".equals(parts[2])) {
+                    // Case: /films/10/inventory (storeId in JSON body)
+                    handleInventoryCreation(pathInfo, request, response);
+                    return;
+                }
             }
+            
+            // Handle regular film creation: POST /films
+            Map<String, Object> requestData = objectMapper.readValue(request.getInputStream(), Map.class);
+            Film film = filmService.createFilm(requestData);
+            
+            Map<String, Object> responseData = new HashMap<>();
+            responseData.put("success", true);
+            responseData.put("filmId", film.getFilmId());
+            responseData.put("message", "Film created successfully");
+            
+            response.setStatus(HttpServletResponse.SC_CREATED);
+            objectMapper.writeValue(response.getOutputStream(), responseData);
             
         } catch (SQLException | IllegalArgumentException e) {
             handleError(response, HttpServletResponse.SC_BAD_REQUEST, e.getMessage());
@@ -98,22 +104,21 @@ public class FilmController extends HttpServlet {
         }
     }
 
-    //  Handle inventory creation
-    private void handleInventoryCreation(String pathInfo, HttpServletRequest request, HttpServletResponse response) 
+    // For URL like: POST /films/10/inventory/2 with body { "quantity": 5 }
+    private void handleInventoryCreationWithStoreInURL(String pathInfo, HttpServletRequest request, HttpServletResponse response) 
             throws IOException, SQLException {
         
-        // Parse URL: /1/inventory/3 -> filmId=1, storeId=3
         String[] pathParts = pathInfo.split("/");
-        if (pathParts.length < 4) {
+        if (pathParts.length != 4 || !"inventory".equals(pathParts[2])) {
             handleError(response, HttpServletResponse.SC_BAD_REQUEST, "Invalid URL format. Use /films/{filmId}/inventory/{storeId}");
             return;
         }
         
         try {
-            int filmId = Integer.parseInt(pathParts[1]);        // ✅ Fixed: pathParts[1]
-            int storeId = Integer.parseInt(pathParts[2]);       // ✅ Fixed: pathParts[2] not pathParts[1]
+            int filmId = Integer.parseInt(pathParts[1]);
+            int storeId = Integer.parseInt(pathParts[3]);
             
-            // Read quantity from JSON body
+            // Read only quantity from JSON body
             Map<String, Object> requestData = objectMapper.readValue(request.getInputStream(), Map.class);
             Integer quantity = (Integer) requestData.get("quantity");
             
@@ -130,8 +135,50 @@ public class FilmController extends HttpServlet {
             
         } catch (NumberFormatException e) {
             handleError(response, HttpServletResponse.SC_BAD_REQUEST, "Invalid film ID or store ID");
-        } catch (ArrayIndexOutOfBoundsException e) {
-            handleError(response, HttpServletResponse.SC_BAD_REQUEST, "Invalid URL format");
+        } catch (Exception e) {
+            handleError(response, HttpServletResponse.SC_BAD_REQUEST, "Error processing request: " + e.getMessage());
+        }
+    }
+
+    // For URL like: POST /films/10/inventory with body { "storeId": 2, "quantity": 5 }
+    private void handleInventoryCreation(String pathInfo, HttpServletRequest request, HttpServletResponse response) 
+            throws IOException, SQLException {
+        
+        String[] pathParts = pathInfo.split("/");
+        if (pathParts.length < 3) {
+            handleError(response, HttpServletResponse.SC_BAD_REQUEST, "Invalid URL format. Use /films/{filmId}/inventory");
+            return;
+        }
+        
+        try {
+            int filmId = Integer.parseInt(pathParts[1]); // Get filmId from URL
+            
+            // Read storeId and quantity from JSON body
+            Map<String, Object> requestData = objectMapper.readValue(request.getInputStream(), Map.class);
+            
+            Integer storeId = (Integer) requestData.get("storeId");
+            Integer quantity = (Integer) requestData.get("quantity");
+            
+            if (storeId == null || storeId <= 0) {
+                handleError(response, HttpServletResponse.SC_BAD_REQUEST, "StoreId must be a positive number");
+                return;
+            }
+            
+            if (quantity == null || quantity <= 0) {
+                handleError(response, HttpServletResponse.SC_BAD_REQUEST, "Quantity must be a positive number");
+                return;
+            }
+            
+            // Delegate to service
+            Map<String, Object> result = filmService.handleInventoryCreation(filmId, storeId, quantity);
+            
+            response.setStatus(HttpServletResponse.SC_CREATED);
+            objectMapper.writeValue(response.getOutputStream(), result);
+            
+        } catch (NumberFormatException e) {
+            handleError(response, HttpServletResponse.SC_BAD_REQUEST, "Invalid film ID");
+        } catch (Exception e) {
+            handleError(response, HttpServletResponse.SC_BAD_REQUEST, "Error processing request: " + e.getMessage());
         }
     }
 
@@ -192,10 +239,6 @@ public class FilmController extends HttpServlet {
                     Film film = filmService.getFilmById(filmId);
                     objectMapper.writeValue(response.getOutputStream(), film);
 
-                } else if (titleParam != null) {
-                    List<Film> films = filmService.getFilmsByTitle(titleParam);
-                    objectMapper.writeValue(response.getOutputStream(), films);
-
                 } else if (languageIdParam != null) {
                     int languageId = Integer.parseInt(languageIdParam);
                     List<Film> films = filmService.getFilmsByLanguage(languageId);
@@ -251,7 +294,8 @@ public class FilmController extends HttpServlet {
         }
     }
 
-    @Override
+    @SuppressWarnings("unchecked")
+	@Override
     protected void doPut(HttpServletRequest request, HttpServletResponse response) 
             throws IOException {
         

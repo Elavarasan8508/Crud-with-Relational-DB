@@ -8,6 +8,8 @@ public class Customer {
     private int customerId;
     private Address address;
     private Store store;
+    private Integer storeId;
+    private Integer addressId;
     private String firstName;
     private String lastName;
     private String email;
@@ -116,7 +118,25 @@ public class Customer {
     }
 
 
-    // Builder Pattern
+    public Integer getStoreId() {
+		return storeId;
+	}
+
+	public void setStoreId(Integer storeId) {
+		this.storeId = storeId;
+	}
+
+
+	public Integer getAddressId() {
+		return addressId;
+	}
+
+	public void setAddressId(Integer addressId) {
+		this.addressId = addressId;
+	}
+
+
+	// Builder Pattern
     public static class Builder {
         private Customer instance = new Customer();
 

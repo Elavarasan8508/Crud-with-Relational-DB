@@ -1,256 +1,189 @@
 package dao;
 
-import model.*;
+import java.math.BigDecimal;
 import java.sql.*;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import model.*;
 
 public class PaymentDao {
-    
-    private static final String INSERT_SQL = 
-        "INSERT INTO payment (customer_id, staff_id, rental_id, amount, payment_date, last_update) " +
-        "VALUES (?, ?, ?, ?, ?, ?)";
-    
-    private static final String FIND_BY_ID_SQL = 
-        "SELECT payment_id, customer_id, staff_id, rental_id, amount, payment_date, last_update " +
-        "FROM payment WHERE payment_id = ?";
-    
-    private static final String FIND_ALL_SQL = 
-        "SELECT payment_id, customer_id, staff_id, rental_id, amount, payment_date, last_update " +
-        "FROM payment ORDER BY payment_id";
-    
-    private static final String FIND_BY_CUSTOMER_ID_SQL = 
-        "SELECT payment_id, customer_id, staff_id, rental_id, amount, payment_date, last_update " +
-        "FROM payment WHERE customer_id = ? ORDER BY payment_date DESC";
-    
-    private static final String FIND_BY_RENTAL_ID_SQL = 
-        "SELECT payment_id, customer_id, staff_id, rental_id, amount, payment_date, last_update " +
-        "FROM payment WHERE rental_id = ? ORDER BY payment_date DESC";
-    
-    private static final String UPDATE_SQL = 
-        "UPDATE payment SET customer_id = ?, staff_id = ?, rental_id = ?, amount = ?, " +
-        "payment_date = ?, last_update = ? WHERE payment_id = ?";
-    
-    private static final String DELETE_SQL = 
-        "DELETE FROM payment WHERE payment_id = ?";
-    
-    public int insert(Connection connection, Payment payment) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement(INSERT_SQL, Statement.RETURN_GENERATED_KEYS)) {
-            
-            // Extract customer ID from Customer object
+
+    private static final String INSERT_SQL = "INSERT INTO payment (customer_id, staff_id, rental_id, amount, payment_date, last_update) VALUES (?, ?, ?, ?, ?, ?)";
+
+    private static final String SELECT_BY_ID_SQL = "SELECT * FROM payment WHERE payment_id = ?";
+
+    private static final String SELECT_ALL_SQL = "SELECT * FROM payment ORDER BY payment_id";
+
+    private static final String SELECT_BY_CUSTOMER_ID_SQL = "SELECT * FROM payment WHERE customer_id = ?";
+
+    private static final String SELECT_BY_RENTAL_ID_SQL = "SELECT * FROM payment WHERE rental_id = ?";
+
+    private static final String SELECT_BY_STAFF_ID_SQL = "SELECT * FROM payment WHERE staff_id = ?";
+
+    private static final String UPDATE_SQL = "UPDATE payment SET customer_id = ?, staff_id = ?, rental_id = ?, amount = ?, payment_date = ?, last_update = ? WHERE payment_id = ?";
+
+    private static final String DELETE_SQL = "DELETE FROM payment WHERE payment_id = ?";
+
+    public int insert(Connection conn, Payment payment) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement(INSERT_SQL, Statement.RETURN_GENERATED_KEYS)) {
             if (payment.getCustomer() != null && payment.getCustomer().getCustomerId() > 0) {
-                statement.setInt(1, payment.getCustomer().getCustomerId());
+                ps.setInt(1, payment.getCustomer().getCustomerId());
             } else {
-                statement.setNull(1, java.sql.Types.INTEGER);
+                ps.setNull(1, Types.INTEGER);
             }
-            
-            // Extract staff ID from Staff object
             if (payment.getStaff() != null && payment.getStaff().getStaffId() > 0) {
-                statement.setInt(2, payment.getStaff().getStaffId());
+                ps.setInt(2, payment.getStaff().getStaffId());
             } else {
-                statement.setNull(2, java.sql.Types.INTEGER);
+                ps.setNull(2, Types.INTEGER);
             }
-            
-            // Extract rental ID from Rental object
             if (payment.getRental() != null && payment.getRental().getRentalId() > 0) {
-                statement.setInt(3, payment.getRental().getRentalId());
+                ps.setInt(3, payment.getRental().getRentalId());
             } else {
-                statement.setNull(3, java.sql.Types.INTEGER);
+                ps.setNull(3, Types.INTEGER);
             }
-            
-            statement.setBigDecimal(4, payment.getAmount());
-            
-            // Convert LocalDateTime to Timestamp for payment date
-            if (payment.getPaymentDate() != null) {
-                statement.setTimestamp(5, Timestamp.valueOf(payment.getPaymentDate()));
+            BigDecimal val4 = payment.getAmount();
+            if (val4 != null) {
+                ps.setBigDecimal(4, val4);
             } else {
-                statement.setTimestamp(5, new Timestamp(System.currentTimeMillis()));
+                ps.setNull(4, Types.FLOAT);
             }
-            
-            // Use provided LocalDateTime or current time for last update
-            if (payment.getLastUpdate() != null) {
-                statement.setTimestamp(6, Timestamp.valueOf(payment.getLastUpdate()));
-            } else {
-                statement.setTimestamp(6, new Timestamp(System.currentTimeMillis()));
-            }
-            
-            int rowsAffected = statement.executeUpdate();
-            if (rowsAffected == 0) {
-                throw new SQLException("Creating payment failed, no rows affected.");
-            }
-            
-            try (ResultSet generatedKeys = statement.getGeneratedKeys()) {
-                if (generatedKeys.next()) {
-                    int paymentId = generatedKeys.getInt(1);
-                    payment.setPaymentId(paymentId);
-                    return paymentId;
-                } else {
-                    throw new SQLException("Creating payment failed, no ID obtained.");
+            ps.setTimestamp(5, Timestamp.valueOf(payment.getPaymentDate() != null ? payment.getPaymentDate() : java.time.LocalDateTime.now()));
+            ps.setTimestamp(6, Timestamp.valueOf(payment.getLastUpdate() != null ? payment.getLastUpdate() : java.time.LocalDateTime.now()));
+            ps.executeUpdate();
+            try (ResultSet rs = ps.getGeneratedKeys()) {
+                if (rs.next()) {
+                    int id = rs.getInt(1);
+                    payment.setPaymentId(id);
+                    return id;
                 }
             }
         }
+        return -1;
     }
-    
-    public Payment findById(Connection connection, int paymentId) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement(FIND_BY_ID_SQL)) {
-            statement.setInt(1, paymentId);
-            
-            try (ResultSet resultSet = statement.executeQuery()) {
-                if (resultSet.next()) {
-                    return extractPaymentFromResultSet(resultSet);
-                }
-                return null;
+
+    public Payment findById(Connection conn, int id) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement(SELECT_BY_ID_SQL)) {
+            ps.setInt(1, id);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? extract(rs) : null;
             }
         }
     }
-    
-    public List<Payment> findAll(Connection connection) throws SQLException {
-        List<Payment> payments = new ArrayList<>();
-        
-        try (PreparedStatement statement = connection.prepareStatement(FIND_ALL_SQL);
-             ResultSet resultSet = statement.executeQuery()) {
-            
-            while (resultSet.next()) {
-                payments.add(extractPaymentFromResultSet(resultSet));
+
+    public List<Payment> findAll(Connection conn) throws SQLException {
+        List<Payment> list = new ArrayList<>();
+        try (PreparedStatement ps = conn.prepareStatement(SELECT_ALL_SQL);
+            ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                list.add(extract(rs));
             }
         }
-        
-        return payments;
+        return list;
     }
-    
-    public List<Payment> findByCustomerId(Connection connection, int customerId) throws SQLException {
-        List<Payment> payments = new ArrayList<>();
-        
-        try (PreparedStatement statement = connection.prepareStatement(FIND_BY_CUSTOMER_ID_SQL)) {
-            statement.setInt(1, customerId);
-            
-            try (ResultSet resultSet = statement.executeQuery()) {
-                while (resultSet.next()) {
-                    payments.add(extractPaymentFromResultSet(resultSet));
-                }
-            }
-        }
-        
-        return payments;
-    }
-    
-    public List<Payment> findByRentalId(Connection connection, int rentalId) throws SQLException {
-        List<Payment> payments = new ArrayList<>();
-        
-        try (PreparedStatement statement = connection.prepareStatement(FIND_BY_RENTAL_ID_SQL)) {
-            statement.setInt(1, rentalId);
-            
-            try (ResultSet resultSet = statement.executeQuery()) {
-                while (resultSet.next()) {
-                    payments.add(extractPaymentFromResultSet(resultSet));
-                }
-            }
-        }
-        
-        return payments;
-    }
-    
-    public void update(Connection connection, Payment payment) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement(UPDATE_SQL)) {
-            
-            // Extract customer ID from Customer object
+
+    public boolean update(Connection conn, Payment payment) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement(UPDATE_SQL)) {
             if (payment.getCustomer() != null && payment.getCustomer().getCustomerId() > 0) {
-                statement.setInt(1, payment.getCustomer().getCustomerId());
+                ps.setInt(1, payment.getCustomer().getCustomerId());
             } else {
-                statement.setNull(1, java.sql.Types.INTEGER);
+                ps.setNull(1, Types.INTEGER);
             }
-            
-            // Extract staff ID from Staff object
             if (payment.getStaff() != null && payment.getStaff().getStaffId() > 0) {
-                statement.setInt(2, payment.getStaff().getStaffId());
+                ps.setInt(2, payment.getStaff().getStaffId());
             } else {
-                statement.setNull(2, java.sql.Types.INTEGER);
+                ps.setNull(2, Types.INTEGER);
             }
-            
-            // Extract rental ID from Rental object
             if (payment.getRental() != null && payment.getRental().getRentalId() > 0) {
-                statement.setInt(3, payment.getRental().getRentalId());
+                ps.setInt(3, payment.getRental().getRentalId());
             } else {
-                statement.setNull(3, java.sql.Types.INTEGER);
+                ps.setNull(3, Types.INTEGER);
             }
-  
-            statement.setBigDecimal(4, payment.getAmount());
-            
-            // Convert LocalDateTime to Timestamp for payment date
-            if (payment.getPaymentDate() != null) {
-                statement.setTimestamp(5, Timestamp.valueOf(payment.getPaymentDate()));
+            BigDecimal val4 = payment.getAmount();
+            if (val4 != null) {
+                ps.setBigDecimal(4, val4);
             } else {
-                statement.setTimestamp(5, new Timestamp(System.currentTimeMillis()));
+                ps.setNull(4, Types.FLOAT);
             }
-            
-            // Use provided LocalDateTime or current time for last update
-            if (payment.getLastUpdate() != null) {
-                statement.setTimestamp(6, Timestamp.valueOf(payment.getLastUpdate()));
-            } else {
-                statement.setTimestamp(6, new Timestamp(System.currentTimeMillis()));
-            }
-            
-            statement.setInt(7, payment.getPaymentId());
-            
-            int rowsAffected = statement.executeUpdate();
-            if (rowsAffected == 0) {
-                throw new SQLException("Updating payment failed, no rows affected.");
-            }
+            ps.setTimestamp(5, Timestamp.valueOf(payment.getPaymentDate() != null ? payment.getPaymentDate() : java.time.LocalDateTime.now()));
+            ps.setTimestamp(6, Timestamp.valueOf(payment.getLastUpdate() != null ? payment.getLastUpdate() : java.time.LocalDateTime.now()));
+            ps.setInt(7, payment.getPaymentId());
+            return ps.executeUpdate() > 0;
         }
     }
-    
-    public void deleteById(Connection connection, int paymentId) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement(DELETE_SQL)) {
-            statement.setInt(1, paymentId);
-            
-            int rowsAffected = statement.executeUpdate();
-            if (rowsAffected == 0) {
-                throw new SQLException("Deleting payment failed, no rows affected.");
-            }
+
+    public boolean deleteById(Connection conn, int id) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement(DELETE_SQL)) {
+            ps.setInt(1, id);
+            return ps.executeUpdate() > 0;
         }
     }
-    
-    private Payment extractPaymentFromResultSet(ResultSet resultSet) throws SQLException {
+
+    public List<Payment> findByCustomerId(Connection conn, int customerID) throws SQLException {
+        List<Payment> list = new ArrayList<>();
+        try (PreparedStatement ps = conn.prepareStatement(SELECT_BY_CUSTOMER_ID_SQL)) {
+            ps.setInt(1, customerID);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) list.add(extract(rs));
+            }
+        }
+        return list;
+    }
+
+    public List<Payment> findByRentalId(Connection conn, int rentalID) throws SQLException {
+        List<Payment> list = new ArrayList<>();
+        try (PreparedStatement ps = conn.prepareStatement(SELECT_BY_RENTAL_ID_SQL)) {
+            ps.setInt(1, rentalID);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) list.add(extract(rs));
+            }
+        }
+        return list;
+    }
+
+    public List<Payment> findByStaffId(Connection conn, int staffID) throws SQLException {
+        List<Payment> list = new ArrayList<>();
+        try (PreparedStatement ps = conn.prepareStatement(SELECT_BY_STAFF_ID_SQL)) {
+            ps.setInt(1, staffID);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) list.add(extract(rs));
+            }
+        }
+        return list;
+    }
+
+    private Payment extract(ResultSet rs) throws SQLException {
         Payment payment = new Payment();
-        payment.setPaymentId(resultSet.getInt("payment_id"));
-        payment.setAmount(resultSet.getBigDecimal("amount"));
-        
-        // Convert Timestamps to LocalDateTime
-        Timestamp paymentDate = resultSet.getTimestamp("payment_date");
-        if (paymentDate != null) {
-            payment.setPaymentDate(paymentDate.toLocalDateTime());
+        Integer payment_id = rs.getObject("payment_id", Integer.class);
+        payment.setPaymentId(payment_id);
+        Integer customer_id = rs.getObject("customer_id", Integer.class);
+        payment.setCustomerId(customer_id);
+        if (customer_id != null && customer_id > 0) {
+            Customer customer = new Customer();
+            customer.setCustomerId(customer_id);
+            payment.setCustomer(customer);
         }
-        
-        Timestamp lastUpdate = resultSet.getTimestamp("last_update");
-        if (lastUpdate != null) {
-            payment.setLastUpdate(lastUpdate.toLocalDateTime());
+        Integer staff_id = rs.getObject("staff_id", Integer.class);
+        payment.setStaffId(staff_id);
+        if (staff_id != null && staff_id > 0) {
+            Staff staff = new Staff();
+            staff.setStaffId(staff_id);
+            payment.setStaff(staff);
         }
-        
-        // Create placeholder Customer object with ID for service layer to load full object
-        int customerId = resultSet.getInt("customer_id");
-        if (customerId > 0) {
-            Customer tempCustomer = new Customer();
-            tempCustomer.setCustomerId(customerId);
-            payment.setCustomer(tempCustomer);
+        Integer rental_id = rs.getObject("rental_id", Integer.class);
+        payment.setRentalId(rental_id);
+        if (rental_id != null && rental_id > 0) {
+            Rental rental = new Rental();
+            rental.setRentalId(rental_id);
+            payment.setRental(rental);
         }
-        
-        // Create placeholder Staff object with ID for service layer to load full object
-        int staffId = resultSet.getInt("staff_id");
-        if (staffId > 0) {
-            Staff tempStaff = new Staff();
-            tempStaff.setStaffId(staffId);
-            payment.setStaff(tempStaff);
-        }
-        
-        // Create placeholder Rental object with ID for service layer to load full object
-        int rentalId = resultSet.getInt("rental_id");
-        if (rentalId > 0) {
-            Rental tempRental = new Rental();
-            tempRental.setRentalId(rentalId);
-            payment.setRental(tempRental);
-        }
-        
+        BigDecimal amount = rs.getObject("amount", BigDecimal.class);
+        payment.setAmount(amount);
+        Timestamp payment_date = rs.getTimestamp("payment_date");
+        if (payment_date != null)
+            payment.setPaymentDate(payment_date.toLocalDateTime());
+        Timestamp last_update = rs.getTimestamp("last_update");
+        if (last_update != null)
+            payment.setLastUpdate(last_update.toLocalDateTime());
         return payment;
     }
 }

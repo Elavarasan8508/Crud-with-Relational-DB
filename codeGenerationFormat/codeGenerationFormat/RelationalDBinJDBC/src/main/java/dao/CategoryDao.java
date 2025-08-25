@@ -1,140 +1,82 @@
 package dao;
 
-import model.Category;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
+import model.*;
 
 public class CategoryDao {
 
-    private static final String INSERT_SQL =
-        "INSERT INTO category (name, last_update) VALUES (?, ?)";
+    private static final String INSERT_SQL = "INSERT INTO category (name, last_update) VALUES (?, ?)";
 
-    private static final String FIND_BY_ID_SQL =
-        "SELECT category_id, name, last_update FROM category WHERE category_id = ?";
+    private static final String SELECT_BY_ID_SQL = "SELECT * FROM category WHERE category_id = ?";
 
-    private static final String FIND_ALL_SQL =
-        "SELECT category_id, name, last_update FROM category ORDER BY category_id";
+    private static final String SELECT_ALL_SQL = "SELECT * FROM category ORDER BY category_id";
 
-    private static final String UPDATE_SQL =
-        "UPDATE category SET name = ?, last_update = ? WHERE category_id = ?";
+    private static final String UPDATE_SQL = "UPDATE category SET name = ?, last_update = ? WHERE category_id = ?";
 
-    private static final String DELETE_SQL =
-        "DELETE FROM category WHERE category_id = ?";
+    private static final String DELETE_SQL = "DELETE FROM category WHERE category_id = ?";
 
-    // Insert
-    public int insert(Connection connection, Category category) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement(INSERT_SQL, Statement.RETURN_GENERATED_KEYS)) {
-            statement.setString(1, category.getName());
-            statement.setTimestamp(2, Timestamp.valueOf(category.getLastUpdate() != null
-                    ? category.getLastUpdate()
-                    : java.time.LocalDateTime.now()));
-
-            int rowsAffected = statement.executeUpdate();
-            if (rowsAffected == 0) {
-                throw new SQLException("Creating category failed, no rows affected.");
-            }
-
-            try (ResultSet generatedKeys = statement.getGeneratedKeys()) {
-                if (generatedKeys.next()) {
-                    int categoryId = generatedKeys.getInt(1);
-                    category.setCategoryId(categoryId);
-                    return categoryId;
-                } else {
-                    throw new SQLException("Creating category failed, no ID obtained.");
-                }
-            }
-        }
-    }
-
-    // Find by ID
-    public Category findById(Connection connection, int categoryId) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement(FIND_BY_ID_SQL)) {
-            statement.setInt(1, categoryId);
-
-            try (ResultSet rs = statement.executeQuery()) {
+    public int insert(Connection conn, Category category) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement(INSERT_SQL, Statement.RETURN_GENERATED_KEYS)) {
+            ps.setString(1, category.getName());
+            ps.setTimestamp(2, Timestamp.valueOf(category.getLastUpdate() != null ? category.getLastUpdate() : java.time.LocalDateTime.now()));
+            ps.executeUpdate();
+            try (ResultSet rs = ps.getGeneratedKeys()) {
                 if (rs.next()) {
-                    Category category = new Category();
-                    category.setCategoryId(rs.getInt("category_id"));
-                    category.setName(rs.getString("name"));
-                    Timestamp lastUpdate = rs.getTimestamp("last_update");
-                    if (lastUpdate != null) {
-                        category.setLastUpdate(lastUpdate.toLocalDateTime());
-                    }
-                    return category;
+                    int id = rs.getInt(1);
+                    category.setCategoryId(id);
+                    return id;
                 }
             }
         }
-        return null;
+        return -1;
     }
 
-    // Find all
-    public List<Category> findAll(Connection connection) throws SQLException {
-        List<Category> categories = new ArrayList<>();
-        try (PreparedStatement statement = connection.prepareStatement(FIND_ALL_SQL);
-             ResultSet rs = statement.executeQuery()) {
+    public Category findById(Connection conn, int id) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement(SELECT_BY_ID_SQL)) {
+            ps.setInt(1, id);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? extract(rs) : null;
+            }
+        }
+    }
 
+    public List<Category> findAll(Connection conn) throws SQLException {
+        List<Category> list = new ArrayList<>();
+        try (PreparedStatement ps = conn.prepareStatement(SELECT_ALL_SQL);
+            ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {
-                Category category = new Category();
-                category.setCategoryId(rs.getInt("category_id"));
-                category.setName(rs.getString("name"));
-                Timestamp lastUpdate = rs.getTimestamp("last_update");
-                if (lastUpdate != null) {
-                    category.setLastUpdate(lastUpdate.toLocalDateTime());
-                }
-                categories.add(category);
+                list.add(extract(rs));
             }
         }
-        return categories;
+        return list;
     }
 
-    // Update
-    public void update(Connection connection, Category category) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement(UPDATE_SQL)) {
-            statement.setString(1, category.getName());
-            statement.setTimestamp(2, Timestamp.valueOf(category.getLastUpdate() != null
-                    ? category.getLastUpdate()
-                    : java.time.LocalDateTime.now()));
-            statement.setInt(3, category.getCategoryId());
-
-            int rowsAffected = statement.executeUpdate();
-            if (rowsAffected == 0) {
-                throw new SQLException("Updating category failed, no rows affected.");
-            }
+    public boolean update(Connection conn, Category category) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement(UPDATE_SQL)) {
+            ps.setString(1, category.getName());
+            ps.setTimestamp(2, Timestamp.valueOf(category.getLastUpdate() != null ? category.getLastUpdate() : java.time.LocalDateTime.now()));
+            ps.setInt(3, category.getCategoryId());
+            return ps.executeUpdate() > 0;
         }
     }
 
-    // Delete
-    public void deleteById(Connection connection, int categoryId) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement(DELETE_SQL)) {
-            statement.setInt(1, categoryId);
-            int rowsAffected = statement.executeUpdate();
-            if (rowsAffected == 0) {
-                throw new SQLException("Deleting category failed, no rows affected.");
-            }
+    public boolean deleteById(Connection conn, int id) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement(DELETE_SQL)) {
+            ps.setInt(1, id);
+            return ps.executeUpdate() > 0;
         }
     }
 
-    // Find by Name
-    public List<Category> findByName(Connection connection, String name) throws SQLException {
-        List<Category> categories = new ArrayList<>();
-        String sql = "SELECT category_id, name, last_update FROM category WHERE name LIKE ?";
-
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, "%" + name + "%");
-            try (ResultSet rs = statement.executeQuery()) {
-                while (rs.next()) {
-                    Category category = new Category();
-                    category.setCategoryId(rs.getInt("category_id"));
-                    category.setName(rs.getString("name"));
-                    Timestamp lastUpdate = rs.getTimestamp("last_update");
-                    if (lastUpdate != null) {
-                        category.setLastUpdate(lastUpdate.toLocalDateTime());
-                    }
-                    categories.add(category);
-                }
-            }
-        }
-        return categories;
+    private Category extract(ResultSet rs) throws SQLException {
+        Category category = new Category();
+        Integer category_id = rs.getObject("category_id", Integer.class);
+        category.setCategoryId(category_id);
+        category.setName(rs.getString("name"));
+        Timestamp last_update = rs.getTimestamp("last_update");
+        if (last_update != null)
+            category.setLastUpdate(last_update.toLocalDateTime());
+        return category;
     }
 }

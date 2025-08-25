@@ -358,29 +358,6 @@ public class FilmManagementService {
         });
     }
     
-    // Business Logic: Get Films by Title - Returns List<Film> with FULL relationships
-    public List<Film> getFilmsByTitle(String title) throws SQLException {
-        return TransactionManager.executeInTransaction(connection -> {
-            List<Film> films = filmDao.findByTitle(connection, title);
-            List<Film> filmsWithDetails = new ArrayList<>();
-            
-            for (Film film : films) {
-                try {
-                    Film filmWithDetails = buildFilmWithRelationships(connection, film.getFilmId());
-                    if (filmWithDetails != null) {
-                        filmsWithDetails.add(filmWithDetails);
-                    }
-                } catch (Exception e) {
-                    film.setFilmActorList(new ArrayList<>());
-                    film.setFilmCategoryList(new ArrayList<>());
-                    film.setInventoryList(new ArrayList<>());
-                    filmsWithDetails.add(film);
-                }
-            }
-            
-            return filmsWithDetails;
-        });
-    }
     
     // Business Logic: Get Films by Language - Returns List<Film> with FULL relationships
     public List<Film> getFilmsByLanguage(int languageId) throws SQLException {
@@ -514,12 +491,12 @@ public class FilmManagementService {
             // Delete relationships first
             List<FilmActor> filmActors = filmActorDao.findByFilmId(connection, filmId);
             for (FilmActor fa : filmActors) {
-                filmActorDao.delete(connection, fa.getActor().getActorId(), filmId);
+                filmActorDao.deleteById(connection, fa.getActor().getActorId());
             }
             
             List<FilmCategory> filmCategories = filmCategoryDao.findByFilmId(connection, filmId);
             for (FilmCategory fc : filmCategories) {
-                filmCategoryDao.delete(connection, filmId, fc.getCategory().getCategoryId());
+                filmCategoryDao.deleteById(connection, fc.getCategory().getCategoryId());
             }
             
             for (Inventory inventory : inventories) {

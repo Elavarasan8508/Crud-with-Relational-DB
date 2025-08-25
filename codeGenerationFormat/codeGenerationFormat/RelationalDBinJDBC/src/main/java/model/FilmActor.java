@@ -8,6 +8,8 @@ public class FilmActor {
     private Actor actor;
 
     private Film film;
+    private Integer actorId;
+    private Integer filmId;
 
     private LocalDateTime lastUpdate;
 
@@ -35,6 +37,20 @@ public class FilmActor {
 	}
 	public void setLastUpdate(LocalDateTime lastUpdate) {
 		this.lastUpdate = lastUpdate;
+	}
+
+	public Integer getActorId() {
+		return actorId;
+	}
+	public void setActorId(Integer actorId) {
+		this.actorId = actorId;
+	}
+
+	public Integer getFilmId() {
+		return filmId;
+	}
+	public void setFilmId(Integer filmId) {
+		this.filmId = filmId;
 	}
 
 	public static class Builder {

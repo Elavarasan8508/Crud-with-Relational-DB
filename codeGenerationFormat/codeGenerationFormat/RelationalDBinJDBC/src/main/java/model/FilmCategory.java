@@ -8,7 +8,7 @@ public class FilmCategory {
     private Category category;
 
     private Film film;
-
+    private Integer filmId;
     private LocalDateTime lastUpdate;
 
     
@@ -49,6 +49,16 @@ public class FilmCategory {
 
 	public void setLastUpdate(java.time.LocalDateTime lastUpdate) {
 		this.lastUpdate = lastUpdate;
+	}
+
+
+	public Integer getFilmId() {
+		return filmId;
+	}
+
+
+	public void setFilmId(Integer filmId) {
+		this.filmId = filmId;
 	}
 
 

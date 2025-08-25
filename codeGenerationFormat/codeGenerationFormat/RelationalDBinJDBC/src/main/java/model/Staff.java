@@ -10,6 +10,8 @@ public class Staff {
     private Store store;
     private Store managerStaff;
     private String firstName;
+    private Integer storeId;
+    private Integer addressId;
     private String lastName;
     private String email;
     private Boolean active;
@@ -130,6 +132,20 @@ public class Staff {
 	}
 	public void setStoreList(List<Store> storeList) {
 		this.storeList = storeList;
+	}
+	public Integer getAddressId() {
+		return addressId;
+	}
+
+	public void setAddressId(Integer addressId) {
+		this.addressId = addressId;
+	}
+	public Integer getStoreId() {
+		return storeId;
+	}
+
+	public void setStoreId(Integer storeId) {
+		this.storeId = storeId;
 	}
 	public static class Builder {
 

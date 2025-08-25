@@ -12,6 +12,11 @@ public class Payment {
 
     private Staff staff;
     private BigDecimal amount;
+    private Integer customerId;
+
+    private Integer staffId;
+
+    private Integer rentalId;
 
     private LocalDateTime paymentDate;
 
@@ -71,6 +76,30 @@ public class Payment {
 
 	public void setLastUpdate(java.time.LocalDateTime lastUpdate) {
 		this.lastUpdate = lastUpdate;
+	}
+
+	public Integer getCustomerId() {
+		return customerId;
+	}
+
+	public void setCustomerId(Integer customerId) {
+		this.customerId = customerId;
+	}
+
+	public Integer getStaffId() {
+		return staffId;
+	}
+
+	public void setStaffId(Integer staffId) {
+		this.staffId = staffId;
+	}
+
+	public Integer getRentalId() {
+		return rentalId;
+	}
+
+	public void setRentalId(Integer rentalId) {
+		this.rentalId = rentalId;
 	}
 
 	public static class Builder {

@@ -12,6 +12,7 @@ public class City {
     private LocalDateTime lastUpdate;
 
     private List<Address> addressList;
+    private Integer countryId;
 
 	public int getCityId() {
 		return cityId;
@@ -51,6 +52,14 @@ public class City {
 
 	public void setAddressList(List<Address> addressList) {
 		this.addressList = addressList;
+	}
+
+	public Integer getCountryId() {
+		return countryId;
+	}
+
+	public void setCountryId(Integer countryId) {
+		this.countryId = countryId;
 	}
 
 	public static class Builder {

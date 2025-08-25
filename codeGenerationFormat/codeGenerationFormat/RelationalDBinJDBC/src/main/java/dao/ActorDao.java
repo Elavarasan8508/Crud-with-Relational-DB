@@ -1,105 +1,87 @@
 package dao;
 
-import model.Actor;
 import java.sql.*;
+import java.util.ArrayList;
+import java.util.List;
+
+import model.*;
+
 
 public class ActorDao {
 
-    private static final String BASE_SELECT_SQL =
-        "SELECT actor_id, first_name, last_name, last_update FROM actor";
+    private static final String INSERT_SQL = "INSERT INTO actor (first_name, last_name, last_update) VALUES (?, ?, ?)";
 
-    private static final String INSERT_SQL =
-        "INSERT INTO actor (first_name, last_name, last_update) VALUES (?, ?, ?)";
+    private static final String SELECT_BY_ID_SQL = "SELECT * FROM actor WHERE actor_id = ?";
 
-    private static final String UPDATE_SQL =
-        "UPDATE actor SET first_name = ?, last_name = ?, last_update = ? WHERE actor_id = ?";
+    private static final String SELECT_ALL_SQL = "SELECT * FROM actor ORDER BY actor_id";
 
-    private static final String DELETE_SQL =
-        "DELETE FROM actor WHERE actor_id = ?";
+    private static final String UPDATE_SQL = "UPDATE actor SET first_name = ?, last_name = ?, last_update = ? WHERE actor_id = ?";
 
-    // Insert
-    public int insert(Connection connection, Actor actor) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement(
-                INSERT_SQL, Statement.RETURN_GENERATED_KEYS)) {
-            statement.setString(1, actor.getFirstName());
-            statement.setString(2, actor.getLastName());
+    private static final String DELETE_SQL = "DELETE FROM actor WHERE actor_id = ?";
 
-            if (actor.getLastUpdate() != null) {
-                statement.setTimestamp(3, Timestamp.valueOf(actor.getLastUpdate()));
-            } else {
-                statement.setTimestamp(3, new Timestamp(System.currentTimeMillis()));
-            }
-
-            int rows = statement.executeUpdate();
-            if (rows == 0) {
-                throw new SQLException("Creating actor failed, no rows affected.");
-            }
-
-            try (ResultSet keys = statement.getGeneratedKeys()) {
-                if (keys.next()) {
-                    int actorId = keys.getInt(1);
-                    actor.setActorId(actorId);
-                    return actorId;
-                } else {
-                    throw new SQLException("Creating actor failed, no ID obtained.");
-                }
-            }
-        }
-    }
-
-    // Find by ID
-    public Actor findById(Connection connection, int actorId) throws SQLException {
-        String sql = BASE_SELECT_SQL + " WHERE actor_id = ?";
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setInt(1, actorId);
-            try (ResultSet rs = statement.executeQuery()) {
+    public int insert(Connection conn, Actor actor) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement(INSERT_SQL, Statement.RETURN_GENERATED_KEYS)) {
+            ps.setString(1, actor.getFirstName());
+            ps.setString(2, actor.getLastName());
+            ps.setTimestamp(3, Timestamp.valueOf(actor.getLastUpdate() != null ? actor.getLastUpdate() : java.time.LocalDateTime.now()));
+            ps.executeUpdate();
+            try (ResultSet rs = ps.getGeneratedKeys()) {
                 if (rs.next()) {
-                    Actor actor = new Actor();
-                    actor.setActorId(rs.getInt("actor_id"));
-                    actor.setFirstName(rs.getString("first_name"));
-                    actor.setLastName(rs.getString("last_name"));
-
-                    Timestamp lastUpdate = rs.getTimestamp("last_update");
-                    if (lastUpdate != null) {
-                        actor.setLastUpdate(lastUpdate.toLocalDateTime());
-                    }
-
-                    return actor;
+                    int id = rs.getInt(1);
+                    actor.setActorId(id);
+                    return id;
                 }
-                return null;
+            }
+        }
+        return -1;
+    }
+
+    public Actor findById(Connection conn, int id) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement(SELECT_BY_ID_SQL)) {
+            ps.setInt(1, id);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? extract(rs) : null;
             }
         }
     }
 
-    // Update
-    public void update(Connection connection, Actor actor) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement(UPDATE_SQL)) {
-            statement.setString(1, actor.getFirstName());
-            statement.setString(2, actor.getLastName());
-
-            if (actor.getLastUpdate() != null) {
-                statement.setTimestamp(3, Timestamp.valueOf(actor.getLastUpdate()));
-            } else {
-                statement.setTimestamp(3, new Timestamp(System.currentTimeMillis()));
+    public List<Actor> findAll(Connection conn) throws SQLException {
+        List<Actor> list = new ArrayList<>();
+        try (PreparedStatement ps = conn.prepareStatement(SELECT_ALL_SQL);
+            ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                list.add(extract(rs));
             }
+        }
+        return list;
+    }
 
-            statement.setInt(4, actor.getActorId());
-
-            int rows = statement.executeUpdate();
-            if (rows == 0) {
-                throw new SQLException("Updating actor failed, no rows affected.");
-            }
+    public boolean update(Connection conn, Actor actor) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement(UPDATE_SQL)) {
+            ps.setString(1, actor.getFirstName());
+            ps.setString(2, actor.getLastName());
+            ps.setTimestamp(3, Timestamp.valueOf(actor.getLastUpdate() != null ? actor.getLastUpdate() : java.time.LocalDateTime.now()));
+            ps.setInt(4, actor.getActorId());
+            return ps.executeUpdate() > 0;
         }
     }
 
-    // Delete
-    public void deleteById(Connection connection, int actorId) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement(DELETE_SQL)) {
-            statement.setInt(1, actorId);
-            int rows = statement.executeUpdate();
-            if (rows == 0) {
-                throw new SQLException("Deleting actor failed, no rows affected.");
-            }
+    public boolean deleteById(Connection conn, int id) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement(DELETE_SQL)) {
+            ps.setInt(1, id);
+            return ps.executeUpdate() > 0;
         }
+    }
+
+    private Actor extract(ResultSet rs) throws SQLException {
+        Actor actor = new Actor();
+        Integer actor_id = rs.getObject("actor_id", Integer.class);
+        actor.setActorId(actor_id);
+        actor.setFirstName(rs.getString("first_name"));
+        actor.setLastName(rs.getString("last_name"));
+        Timestamp last_update = rs.getTimestamp("last_update");
+        if (last_update != null)
+            actor.setLastUpdate(last_update.toLocalDateTime());
+        return actor;
     }
 }

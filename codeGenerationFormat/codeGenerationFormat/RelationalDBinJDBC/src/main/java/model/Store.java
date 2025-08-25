@@ -9,6 +9,8 @@ public class Store {
     private Address address;
     private Staff managerStaff;
     private LocalDateTime lastUpdate;
+    private Integer managerStaffId;
+    private Integer addressId;
 
     private List<Customer> customerList;
     private List<Inventory> inventoryList;
@@ -75,7 +77,25 @@ public class Store {
     }
 
 
-    // Builder Pattern
+    public Integer getManagerStaffId() {
+		return managerStaffId;
+	}
+
+	public void setManagerStaffId(Integer managerStaffId) {
+		this.managerStaffId = managerStaffId;
+	}
+
+
+	public Integer getAddressId() {
+		return addressId;
+	}
+
+	public void setAddressId(Integer addressId) {
+		this.addressId = addressId;
+	}
+
+
+	// Builder Pattern
     public static class Builder {
 
         private Store instance = new Store();

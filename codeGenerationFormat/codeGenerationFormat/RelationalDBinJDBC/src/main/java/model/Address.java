@@ -18,7 +18,9 @@ public class Address {
     private String district;
 
     private String postalCode;
-
+    
+    private Integer cityId;
+    
     private String phone;
 
     private LocalDateTime lastUpdate;
@@ -125,7 +127,15 @@ public class Address {
         this.storeList = storeList;
     }
 
-    public static class Builder {
+    public Integer getCityId() {
+		return cityId;
+	}
+
+	public void setCityId(Integer cityId) {
+		this.cityId = cityId;
+	}
+
+	public static class Builder {
 
         private Address instance = new Address();;
 

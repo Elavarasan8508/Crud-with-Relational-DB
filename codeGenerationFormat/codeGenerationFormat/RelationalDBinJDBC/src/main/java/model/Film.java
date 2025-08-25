@@ -20,6 +20,8 @@ public class Film {
     private String rating;
     private String specialFeatures;
     private LocalDateTime lastUpdate;
+    private Integer originalLanguageId;
+    private Integer languageId;
     
     // Relationship lists
     private List<FilmActor> filmActorList;
@@ -170,7 +172,26 @@ public class Film {
         this.inventoryList = inventoryList;
     }
 
-    // Builder Pattern
+
+	public Integer getOriginalLanguageId() {
+		return originalLanguageId;
+	}
+
+	public void setOriginalLanguageId(Integer originalLanguageId) {
+		this.originalLanguageId = originalLanguageId;
+	}
+
+
+	public Integer getLanguageId() {
+		return languageId;
+	}
+
+	public void setLanguageId(Integer languageId) {
+		this.languageId = languageId;
+	}
+
+
+	// Builder Pattern
     public static class Builder {
         private Film instance = new Film();
 

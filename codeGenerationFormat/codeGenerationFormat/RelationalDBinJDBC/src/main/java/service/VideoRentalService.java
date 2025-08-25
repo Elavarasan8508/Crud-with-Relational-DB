@@ -30,13 +30,6 @@ public class VideoRentalService {
         this.paymentDao = new PaymentDao();
     }
     
-    private void validateInventoryAvailable(java.sql.Connection connection, int filmId, int storeId) throws SQLException {
-        // Check if inventory exists and is available (not currently rented)
-        boolean hasAvailableInventory = inventoryDao.findAvailableInventory(connection, filmId, storeId);
-        if (!hasAvailableInventory) {
-            throw new IllegalStateException("No available inventory for this film at this store");
-        }
-    }
     
     // Business Logic: Create Rental - Returns Rental object
     public Rental createRental(Map<String, Object> requestData) throws SQLException {
@@ -83,10 +76,6 @@ public class VideoRentalService {
                         throw new IllegalArgumentException("Film not found");
                     }
                     
-                    // Validate inventory available for new rentals
-                    if (returnDate == null) {
-                        validateInventoryAvailable(connection, film.getFilmId(), inventory.getStore().getStoreId());
-                    }
                     
                     // Set complete objects and timestamps
                     rental.setCustomer(customer);
